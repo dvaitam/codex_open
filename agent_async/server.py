@@ -105,6 +105,13 @@ class RunManager:
 
         try:
             asyncio.run(_run())
+        except asyncio.CancelledError:
+            # Graceful cancel: mark as done
+            try:
+                EventBus(run.events_path).emit("agent.message", {"role": "info", "content": "Run cancelled."})
+                EventBus(run.events_path).emit("agent.done", {})
+            except Exception:
+                pass
         except Exception as e:
             event_bus.emit("agent.error", {"error": str(e)})
 

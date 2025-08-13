@@ -77,6 +77,16 @@ class AgentRunner:
                         continue
                 dur = int((time.time() - started) * 1000)
                 self.bus.emit("provider.end", {"ok": True, "provider": prov_name, "model": model or "", "duration_ms": dur, "chars": len(reply or "")})
+            except asyncio.CancelledError:
+                # Gracefully handle cancellation, don't crash the worker thread
+                try:
+                    prov_name = getattr(self.provider, "name", "")
+                except Exception:
+                    prov_name = ""
+                self.bus.emit("provider.end", {"ok": False, "provider": prov_name, "model": model or "", "cancelled": True})
+                self.bus.emit("agent.message", {"role": "info", "content": "Cancelled."})
+                self.bus.emit("agent.done", {})
+                return
             except Exception as e:
                 emsg = str(e).lower()
                 # best-effort provider.end on error
