@@ -301,6 +301,11 @@ class AgentRunner:
                 continue
 
             if atype == "done":
+                # If a message is provided alongside done, show it
+                msg = action.get("message")
+                if isinstance(msg, str) and msg.strip():
+                    self.bus.emit("agent.message", {"role": "assistant", "content": msg})
+                    transcript.append({"role": "assistant", "content": msg})
                 self.bus.emit("agent.done", {})
                 break
 
