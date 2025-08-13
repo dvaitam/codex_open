@@ -28,6 +28,8 @@ BASE_DIR = Path(__file__).resolve().parent
 WEB_DIR = BASE_DIR / "web"
 RUNS_DIR = Path.cwd() / "runs"
 DATA_DIR = Path.cwd() / "data"
+SSH_DIR = DATA_DIR / "ssh"
+SSH_KEY_PATH = SSH_DIR / "id"
 
 
 class RunManager:
