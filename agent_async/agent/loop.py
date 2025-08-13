@@ -3,7 +3,7 @@ import json
 import re
 import time
 import os
-from typing import List, Optional, Callable
+from typing import List, Optional, Callable, Dict, Any
 
 from agent_async.core.events import EventBus
 from agent_async.exec.local import LocalExecutor
@@ -46,14 +46,53 @@ class AgentRunner:
                 self.bus.emit("agent.done", {})
                 break
             try:
+                # Prepare a trimmed view of the transcript to avoid model context overflows
+                def estimate_len(msgs: List[Message]) -> int:
+                    total = 0
+                    for m in msgs:
+                        total += len(m.get("role", "")) + len(m.get("content", "")) + 8
+                    return total
+
+                ctx_max = int(os.environ.get("AGENT_ASYNC_CONTEXT_MAX_CHARS", "300000"))
+                per_msg_max = int(os.environ.get("AGENT_ASYNC_PER_MESSAGE_MAX_CHARS", "20000"))
+
+                trimmed: List[Message] = []
+                # Always keep the first system message
+                if transcript and transcript[0].get("role") == "system":
+                    trimmed.append({"role": "system", "content": transcript[0].get("content", "")})
+                    rest = transcript[1:]
+                else:
+                    rest = transcript[:]
+
+                # Truncate overly long message contents first
+                normalized: List[Message] = []
+                for m in rest:
+                    c = m.get("content", "")
+                    if per_msg_max > 0 and len(c) > per_msg_max:
+                        c = c[-per_msg_max:]
+                    normalized.append({"role": m.get("role", "user"), "content": c})
+
+                # Add from the end until within ctx_max
+                acc: List[Message] = []
+                for m in reversed(normalized):
+                    acc.append(m)
+                    candidate = trimmed + list(reversed(acc))
+                    if estimate_len(candidate) > ctx_max:
+                        acc.pop()  # remove last that overflowed
+                        break
+                send_transcript: List[Message] = trimmed + list(reversed(acc))
+
+                if estimate_len(send_transcript) < estimate_len(transcript):
+                    self.bus.emit("agent.message", {"role": "info", "content": "Context trimmed to fit model limits."})
+
                 # Emit provider.start so users can correlate waiting periods
                 prov_name = getattr(self.provider, "name", "")
-                self.bus.emit("provider.start", {"provider": prov_name, "model": model or "", "messages": len(transcript)})
+                self.bus.emit("provider.start", {"provider": prov_name, "model": model or "", "messages": len(send_transcript)})
                 # Emit a lightweight heartbeat so users see we're waiting on the model
                 self.bus.emit("agent.message", {"role": "info", "content": "Thinking with provider..."})
                 # Run provider completion with cooperative cancellation polling
                 started = time.time()
-                task = asyncio.create_task(self.provider.complete(model or "", transcript))
+                task = asyncio.create_task(self.provider.complete(model or "", send_transcript))
                 reply = None
                 while True:
                     if self.cancel_check and self.cancel_check():
