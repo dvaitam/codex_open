@@ -35,6 +35,7 @@ class AgentRunner:
 
         max_steps = 50
         invalid_count = 0
+        invalid_action_count = 0
         consecutive_message_only = 0
         no_text_resets = 0
         think_timeout = int(os.environ.get("AGENT_ASYNC_THINK_TIMEOUT", "120"))
@@ -213,9 +214,41 @@ class AgentRunner:
                 continue
 
             atype = action.get("type")
+            if not isinstance(atype, str):
+                atype = None
             thought = action.get("thought")
             if thought:
                 self.bus.emit("agent.message", {"role": "thought", "content": thought})
+
+            # Handle missing/unknown type by inference or by requesting correction
+            if atype not in ("run", "message", "done"):
+                # Log raw reply excerpt for debugging
+                try:
+                    raw_excerpt = cleaned[:500]
+                    self.bus.emit("agent.message", {"role": "info", "content": f"Provider reply missing/unknown type; inferring action. Excerpt: {raw_excerpt}"})
+                except Exception:
+                    pass
+                # Infer a reasonable default
+                if isinstance(action.get("cmd"), str) and action.get("cmd").strip():
+                    atype = "run"
+                    self.bus.emit("agent.message", {"role": "info", "content": "Inferred action type 'run' from 'cmd' field."})
+                elif isinstance(action.get("message"), str) and action.get("message").strip():
+                    atype = "message"
+                    self.bus.emit("agent.message", {"role": "info", "content": "Inferred action type 'message' from 'message' field."})
+                else:
+                    invalid_action_count += 1
+                    self.bus.emit("agent.error", {"error": f"Unknown action type: {action.get('type')}"})
+                    if invalid_action_count >= 3:
+                        break
+                    # Ask the model to resend with a proper 'type'
+                    transcript.append({
+                        "role": "user",
+                        "content": (
+                            "Your reply lacked a valid 'type'. Reply again with exactly one JSON object only, "
+                            "using the schema {\"type\":\"run|message|done\",\"cmd?\":string,\"message?\":string,\"thought\":string}."
+                        ),
+                    })
+                    continue
 
             if atype == "run":
                 cmd = action.get("cmd")
@@ -271,6 +304,15 @@ class AgentRunner:
                 self.bus.emit("agent.done", {})
                 break
 
-            # Unknown action type
+            # Unknown action type (fallback)
             self.bus.emit("agent.error", {"error": f"Unknown action type: {atype}"})
-            break
+            invalid_action_count += 1
+            if invalid_action_count >= 3:
+                break
+            transcript.append({
+                "role": "user",
+                "content": (
+                    "Reply again with one JSON object only using {\"type\":\"run|message|done\",\"cmd?\":string,\"message?\":string,\"thought\":string}."
+                ),
+            })
+            continue
