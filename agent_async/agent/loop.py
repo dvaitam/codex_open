@@ -25,6 +25,7 @@ class AgentRunner:
 
         max_steps = 50
         invalid_count = 0
+        consecutive_message_only = 0
         no_text_resets = 0
         for step in range(max_steps):
             try:
@@ -166,7 +167,26 @@ class AgentRunner:
                 msg = action.get("message") or ""
                 self.bus.emit("agent.message", {"role": "assistant", "content": msg})
                 transcript.append({"role": "assistant", "content": msg})
-                # Ask provider for next step using the message as context
+                consecutive_message_only += 1
+                # If the assistant keeps asking the user, steer it to act.
+                steer_patterns = [
+                    "can you provide", "please provide", "need the failing", "input for",
+                    "share the", "give me", "what is the", "could you",
+                ]
+                lower = msg.lower()
+                if any(p in lower for p in steer_patterns) or consecutive_message_only >= 2:
+                    hint = (
+                        "No human is available to answer. Do not ask questions. "
+                        "Propose a 'run' action now to gather the needed information yourself. "
+                        "For example: run tests (e.g., 'pytest -q' or project-specific test commands), "
+                        "search the repo ('grep -R -n "test" .'), or inspect files."
+                    )
+                    self.bus.emit("agent.message", {"role": "info", "content": "Steering model to act without user input."})
+                    transcript.append({"role": "user", "content": hint})
+                # Prevent infinite loops of messages
+                if consecutive_message_only >= 6:
+                    self.bus.emit("agent.error", {"error": "Too many assistant messages without actions."})
+                    break
                 continue
 
             if atype == "done":
@@ -176,3 +196,6 @@ class AgentRunner:
             # Unknown action type
             self.bus.emit("agent.error", {"error": f"Unknown action type: {atype}"})
             break
+
+            # Reset message-only counter on any action
+            consecutive_message_only = 0
