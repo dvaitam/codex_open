@@ -1,6 +1,7 @@
 import asyncio
 import json
 import re
+import os
 from typing import List, Optional
 
 from agent_async.core.events import EventBus
@@ -27,11 +28,27 @@ class AgentRunner:
         invalid_count = 0
         consecutive_message_only = 0
         no_text_resets = 0
+        think_timeout = int(os.environ.get("AGENT_ASYNC_THINK_TIMEOUT", "120"))
         for step in range(max_steps):
             try:
-                reply = await self.provider.complete(model or "", transcript)
+                # Emit a lightweight heartbeat so users see we're waiting on the model
+                self.bus.emit("agent.message", {"role": "info", "content": "Thinking with provider..."})
+                reply = await asyncio.wait_for(self.provider.complete(model or "", transcript), timeout=think_timeout)
             except Exception as e:
                 emsg = str(e).lower()
+                if isinstance(e, asyncio.TimeoutError) or "timeout" in emsg:
+                    self.bus.emit(
+                        "agent.message",
+                        {"role": "info", "content": "Provider timed out. Nudging model to act with a JSON 'run' action."},
+                    )
+                    transcript.append({
+                        "role": "user",
+                        "content": (
+                            "Time is limited. Reply now with exactly one JSON object that proposes a 'run' action "
+                            "to gather information (e.g., run tests like 'pytest -q', list files, or grep for failing cases)."
+                        ),
+                    })
+                    continue
                 if "no text in response" in emsg or "empty response" in emsg:
                     if no_text_resets < 2:
                         no_text_resets += 1
@@ -145,6 +162,7 @@ class AgentRunner:
                 if not cmd:
                     self.bus.emit("agent.error", {"error": "Missing cmd in run action"})
                     break
+                consecutive_message_only = 0
                 self.bus.emit("agent.command", {"cmd": cmd})
                 # Execute and stream output
                 chunks: list[str] = []
@@ -196,6 +214,3 @@ class AgentRunner:
             # Unknown action type
             self.bus.emit("agent.error", {"error": f"Unknown action type: {atype}"})
             break
-
-            # Reset message-only counter on any action
-            consecutive_message_only = 0
