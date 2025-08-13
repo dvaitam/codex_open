@@ -37,11 +37,13 @@ class RunManager:
         self.registry = RunRegistry(runs_dir)
         self._threads: Dict[str, threading.Thread] = {}
         self._api_keys: Dict[str, Optional[str]] = {}
+        self._cancels: Dict[str, threading.Event] = {}
 
     def start(self, repo_path: Path, provider_name: str, model: Optional[str], task: str, api_key: Optional[str] = None, repo_url: Optional[str] = None, truncate_limit: Optional[int] = None) -> str:
         run = self.registry.create_run(repo_path, provider_name, model, task, repo_url=repo_url, truncate_limit=truncate_limit)
         if api_key:
             self._api_keys[run.id] = api_key
+        self._cancels[run.id] = threading.Event()
         t = threading.Thread(target=self._worker, args=(run.id,), daemon=True)
         t.start()
         self._threads[run.id] = t
@@ -70,8 +72,12 @@ class RunManager:
                 dst = shlex.quote(str(repo_path))
                 # If SSH key is present, use it for clone
                 ssh_prefix = ""
-                if SSH_KEY_PATH.exists():
-                    ssh_prefix = f"GIT_SSH_COMMAND='ssh -i {shlex.quote(str(SSH_KEY_PATH))} -o StrictHostKeyChecking=no' "
+                try:
+                    key_path = SSH_KEY_PATH  # may not exist in older builds
+                except NameError:
+                    key_path = None
+                if key_path and Path(key_path).exists():
+                    ssh_prefix = f"GIT_SSH_COMMAND='ssh -i {shlex.quote(str(key_path))} -o StrictHostKeyChecking=no' "
                 clone_cmd = f"{ssh_prefix}git clone {src} {dst}"
                 event_bus.emit("agent.message", {"role": "thought", "content": f"Cloning repository: {run.repo_url}"})
                 event_bus.emit("agent.command", {"cmd": clone_cmd})
@@ -89,7 +95,11 @@ class RunManager:
                     return
 
             executor = LocalExecutor(cwd=Path(run.repo_path))
-            runner = AgentRunner(event_bus=event_bus, provider=provider, executor=executor, truncate_limit=run.truncate_limit)
+            # Compose a dynamic cancel_check that reads the current event each time
+            def cancel_check():
+                evt = self._cancels.get(run.id)
+                return bool(evt and evt.is_set())
+            runner = AgentRunner(event_bus=event_bus, provider=provider, executor=executor, truncate_limit=run.truncate_limit, cancel_check=cancel_check)
             await runner.run(run_id=run.id, task=run.task, model=run.model)
 
         try:
@@ -443,7 +453,9 @@ class Handler(BaseHTTPRequestHandler):
         try:
             evt = MANAGER._cancels.get(run_id)
             if not evt:
-                return _json_response(self, HTTPStatus.BAD_REQUEST, {"error": "unknown run id"})
+                # Lazily create a cancel event for older runs
+                MANAGER._cancels[run_id] = threading.Event()
+                evt = MANAGER._cancels[run_id]
             evt.set()
             run = MANAGER.registry.get(run_id)
             EventBus(run.events_path).emit("agent.message", {"role": "info", "content": "Cancellation requested by user."})
@@ -487,8 +499,12 @@ def _create_pr_worker(run_id: str, branch: str, title: str, pr_body: str) -> Non
         # Detect default branch
         # If SSH key exists, prefix git commands to use it
         ssh_prefix = ""
-        if SSH_KEY_PATH.exists():
-            ssh_prefix = f"GIT_SSH_COMMAND='ssh -i {shlex.quote(str(SSH_KEY_PATH))} -o StrictHostKeyChecking=no' "
+        try:
+            key_path = SSH_KEY_PATH
+        except NameError:
+            key_path = None
+        if key_path and Path(key_path).exists():
+            ssh_prefix = f"GIT_SSH_COMMAND='ssh -i {shlex.quote(str(key_path))} -o StrictHostKeyChecking=no' "
 
         await run_cmd(f"{ssh_prefix}git remote -v")
         await run_cmd(f"{ssh_prefix}git fetch --all --prune")

@@ -39,7 +39,21 @@ class AgentRunner:
             try:
                 # Emit a lightweight heartbeat so users see we're waiting on the model
                 self.bus.emit("agent.message", {"role": "info", "content": "Thinking with provider..."})
-                reply = await asyncio.wait_for(self.provider.complete(model or "", transcript), timeout=think_timeout)
+                # Run provider completion with cooperative cancellation polling
+                task = asyncio.create_task(self.provider.complete(model or "", transcript))
+                reply = None
+                while True:
+                    if self.cancel_check and self.cancel_check():
+                        task.cancel()
+                        self.bus.emit("agent.message", {"role": "info", "content": "Cancelled while waiting for provider."})
+                        self.bus.emit("agent.done", {})
+                        return
+                    try:
+                        reply = await asyncio.wait_for(task, timeout=0.5)
+                        break
+                    except asyncio.TimeoutError:
+                        # keep polling
+                        continue
             except Exception as e:
                 emsg = str(e).lower()
                 if isinstance(e, asyncio.TimeoutError) or "timeout" in emsg:
