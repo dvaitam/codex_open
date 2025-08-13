@@ -2,7 +2,7 @@ import asyncio
 import json
 import re
 import os
-from typing import List, Optional
+from typing import List, Optional, Callable
 
 from agent_async.core.events import EventBus
 from agent_async.exec.local import LocalExecutor
@@ -11,11 +11,12 @@ from .prompt import SYSTEM_PROMPT
 
 
 class AgentRunner:
-    def __init__(self, event_bus: EventBus, provider: Provider, executor: LocalExecutor, truncate_limit: Optional[int] = None):
+    def __init__(self, event_bus: EventBus, provider: Provider, executor: LocalExecutor, truncate_limit: Optional[int] = None, cancel_check: Optional[Callable[[], bool]] = None):
         self.bus = event_bus
         self.provider = provider
         self.executor = executor
         self.truncate_limit = truncate_limit
+        self.cancel_check = cancel_check
 
     async def run(self, run_id: str, task: str, model: Optional[str]) -> None:
         original_transcript: List[Message] = [
@@ -30,6 +31,11 @@ class AgentRunner:
         no_text_resets = 0
         think_timeout = int(os.environ.get("AGENT_ASYNC_THINK_TIMEOUT", "120"))
         for step in range(max_steps):
+            # Check for cancellation
+            if self.cancel_check and self.cancel_check():
+                self.bus.emit("agent.message", {"role": "info", "content": "Run cancelled by user."})
+                self.bus.emit("agent.done", {})
+                break
             try:
                 # Emit a lightweight heartbeat so users see we're waiting on the model
                 self.bus.emit("agent.message", {"role": "info", "content": "Thinking with provider..."})
@@ -166,7 +172,7 @@ class AgentRunner:
                 self.bus.emit("agent.command", {"cmd": cmd})
                 # Execute and stream output
                 chunks: list[str] = []
-                async for stream, text in self.executor.run(cmd):
+                async for stream, text in self.executor.run(cmd, cancel_check=self.cancel_check):
                     if stream == "stdout":
                         self.bus.emit("proc.stdout", {"text": text})
                     else:

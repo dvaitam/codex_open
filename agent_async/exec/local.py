@@ -1,12 +1,12 @@
 import asyncio
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator, Optional, Callable
 
 
 class LocalExecutor:
     def __init__(self, cwd):
         self.cwd = str(cwd)
 
-    async def run(self, cmd: str) -> AsyncIterator[tuple[str, str]]:
+    async def run(self, cmd: str, cancel_check: Optional[Callable[[], bool]] = None) -> AsyncIterator[tuple[str, str]]:
         """
         Run a shell command, yielding tuples of (stream, text) where stream is
         "stdout" or "stderr" and text is the chunk.
@@ -47,5 +47,16 @@ class LocalExecutor:
                     else:
                         pending.add(asyncio.create_task(stderr_iter.__anext__()))
 
-        await proc.wait()
+            # Cooperative cancellation: terminate process if requested
+            if cancel_check and cancel_check():
+                try:
+                    proc.terminate()
+                except ProcessLookupError:
+                    pass
+                # cancel any remaining read tasks
+                for t in list(pending):
+                    t.cancel()
+                pending.clear()
+                break
 
+        await proc.wait()

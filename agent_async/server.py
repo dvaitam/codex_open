@@ -156,6 +156,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._api_repos_add()
         if self.path.startswith("/api/run/") and self.path.endswith("/pr"):
             return self._api_run_create_pr()
+        if self.path.startswith("/api/run/") and self.path.endswith("/cancel"):
+            return self._api_run_cancel()
         if self.path == "/api/ssh-key":
             return self._api_ssh_key_save()
         self.send_error(HTTPStatus.NOT_FOUND)
@@ -433,6 +435,21 @@ class Handler(BaseHTTPRequestHandler):
         t = threading.Thread(target=_create_pr_worker, args=(run_id, branch, title, pr_body), daemon=True)
         t.start()
         return _json_response(self, HTTPStatus.OK, {"ok": True})
+
+    def _api_run_cancel(self):
+        run_id = self._parse_run_id()
+        if not run_id:
+            return self.send_error(HTTPStatus.NOT_FOUND)
+        try:
+            evt = MANAGER._cancels.get(run_id)
+            if not evt:
+                return _json_response(self, HTTPStatus.BAD_REQUEST, {"error": "unknown run id"})
+            evt.set()
+            run = MANAGER.registry.get(run_id)
+            EventBus(run.events_path).emit("agent.message", {"role": "info", "content": "Cancellation requested by user."})
+            return _json_response(self, HTTPStatus.OK, {"ok": True})
+        except Exception as e:
+            return _json_response(self, HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(e)})
 
 
 def _norm_branch_name(name: str) -> str:

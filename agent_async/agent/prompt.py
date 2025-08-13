@@ -24,5 +24,11 @@ Context:
 - You operate in the repo root as working directory.
 - Outputs from previous commands are shown to you; rely on them.
 - Keep commands portable (bash/sh). Avoid interactive flags.
+- You may use common compilers/interpreters to build and test code:
+-  - Rust: `cargo test`, `cargo build`, `rustc <file.rs>`
+-  - Go: `go test ./...`, `go build ./...`, `go run <main.go>`
+-  - Python: `python -m pytest`, `python <script.py>`
+-  - Java: `mvn -q -e -DskipTests=false test`, `./gradlew test`, or `javac *.java && java Main`
+-  - C/C++: `make test`, `cmake --build . --target test`, or `gcc/g++ ... && ./a.out`
 """
 ).strip()

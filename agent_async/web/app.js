@@ -346,7 +346,8 @@ function viewRun(runId) {
       el('div', { class: 'badge mono' }, `Run ${runId}`),
       el('div', { id: 'meta', class: 'badge' }, 'Loading...'),
       el('div', { id: 'status', class: 'badge' }, [el('span', { class: 'spinner' }), document.createTextNode(' Running')]),
-      el('button', { class: 'btn secondary', id: 'open_pr_panel' }, 'Create PR')
+      el('button', { class: 'btn secondary', id: 'open_pr_panel' }, 'Create PR'),
+      el('button', { class: 'btn danger', id: 'cancel_run' }, 'Cancel Run')
     ]),
     el('div', { class: 'terminal', id: 'term' })
   ]);
@@ -452,6 +453,21 @@ function viewRun(runId) {
   if (prBtn) {
     prBtn.disabled = false; // allow manual PR even before done
     prBtn.addEventListener('click', () => showPrPanel());
+  }
+  const cancelBtn = $('#cancel_run', container);
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', async () => {
+      cancelBtn.disabled = true; cancelBtn.textContent = 'Cancelling...';
+      try {
+        const res = await fetch(`/api/run/${encodeURIComponent(runId)}/cancel`, { method: 'POST' });
+        if (!res.ok) throw new Error('Cancel failed');
+        appendLine('thought', '[info] Cancellation requested.');
+      } catch (e) {
+        appendLine('stderr', `[error] ${e.message || 'Cancel failed'}`);
+      } finally {
+        cancelBtn.textContent = 'Cancel Run';
+      }
+    });
   }
 
   function suggestBranch() {
