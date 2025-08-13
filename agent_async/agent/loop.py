@@ -1,6 +1,7 @@
 import asyncio
 import json
 import re
+import time
 import os
 from typing import List, Optional, Callable
 
@@ -44,14 +45,20 @@ class AgentRunner:
                 self.bus.emit("agent.done", {})
                 break
             try:
+                # Emit provider.start so users can correlate waiting periods
+                prov_name = getattr(self.provider, "name", "")
+                self.bus.emit("provider.start", {"provider": prov_name, "model": model or "", "messages": len(transcript)})
                 # Emit a lightweight heartbeat so users see we're waiting on the model
                 self.bus.emit("agent.message", {"role": "info", "content": "Thinking with provider..."})
                 # Run provider completion with cooperative cancellation polling
+                started = time.time()
                 task = asyncio.create_task(self.provider.complete(model or "", transcript))
                 reply = None
                 while True:
                     if self.cancel_check and self.cancel_check():
                         task.cancel()
+                        dur = int((time.time() - started) * 1000)
+                        self.bus.emit("provider.end", {"ok": False, "provider": prov_name, "model": model or "", "duration_ms": dur, "cancelled": True})
                         self.bus.emit("agent.message", {"role": "info", "content": "Cancelled while waiting for provider."})
                         self.bus.emit("agent.done", {})
                         return
@@ -61,8 +68,16 @@ class AgentRunner:
                     except asyncio.TimeoutError:
                         # keep polling
                         continue
+                dur = int((time.time() - started) * 1000)
+                self.bus.emit("provider.end", {"ok": True, "provider": prov_name, "model": model or "", "duration_ms": dur, "chars": len(reply or "")})
             except Exception as e:
                 emsg = str(e).lower()
+                # best-effort provider.end on error
+                try:
+                    prov_name = getattr(self.provider, "name", "")
+                    self.bus.emit("provider.end", {"ok": False, "provider": prov_name, "model": model or "", "error": str(e)})
+                except Exception:
+                    pass
                 if isinstance(e, asyncio.TimeoutError) or "timeout" in emsg:
                     self.bus.emit(
                         "agent.message",

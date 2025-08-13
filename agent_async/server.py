@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Dict, Optional, Tuple
 from urllib.parse import urlparse, parse_qs
 import shlex
+import shutil
 
 from agent_async.core.run_registry import RunRegistry
 from agent_async.core.events import EventBus
@@ -175,6 +176,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_DELETE(self):
         if self.path == "/api/ssh-key":
             return self._api_ssh_key_delete()
+        if self.path.startswith("/api/run/"):
+            return self._api_run_delete()
         self.send_error(HTTPStatus.NOT_FOUND)
 
     # --- Static assets ---
@@ -462,6 +465,72 @@ class Handler(BaseHTTPRequestHandler):
             eb.emit("agent.message", {"role": "info", "content": "Cancellation requested by user."})
             eb.emit("agent.done", {})
             return _json_response(self, HTTPStatus.OK, {"ok": True})
+        except Exception as e:
+            return _json_response(self, HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(e)})
+
+    def _api_run_delete(self):
+        run_id = self._parse_run_id()
+        if not run_id:
+            return self.send_error(HTTPStatus.NOT_FOUND)
+        removed_run = False
+        removed_repo = False
+        skip_reason = None
+        try:
+            # Cancel if running
+            evt = MANAGER._cancels.get(run_id)
+            if not evt:
+                MANAGER._cancels[run_id] = threading.Event()
+                evt = MANAGER._cancels[run_id]
+            evt.set()
+
+            run = MANAGER.registry.get(run_id)
+
+            # Decide if we can remove repo directory safely
+            repo_path = Path(run.repo_path).resolve()
+            workspace = (Path.cwd() / "workspace").resolve()
+            # Check if any other run references the same repo_path
+            referenced_elsewhere = False
+            for other_dir in RUNS_DIR.glob("*"):
+                if other_dir.name == run_id:
+                    continue
+                meta_path = other_dir / "meta.json"
+                if not meta_path.exists():
+                    continue
+                try:
+                    meta = json.loads(meta_path.read_text())
+                except Exception:
+                    continue
+                if Path(meta.get("repo_path", "")).resolve() == repo_path:
+                    referenced_elsewhere = True
+                    break
+
+            # Only delete repo if it was cloned (repo_url present), inside workspace, exists, and not referenced
+            if run.repo_url and repo_path.exists():
+                try:
+                    inside_workspace = False
+                    try:
+                        inside_workspace = repo_path.is_relative_to(workspace)  # py3.9+: but available in 3.11
+                    except AttributeError:
+                        inside_workspace = str(repo_path).startswith(str(workspace) + os.sep)
+                    if inside_workspace and not referenced_elsewhere:
+                        shutil.rmtree(repo_path, ignore_errors=True)
+                        removed_repo = True
+                    else:
+                        skip_reason = "repo outside workspace or referenced by another run"
+                except Exception as e:
+                    skip_reason = f"repo delete error: {e}"
+
+            # Remove run directory
+            try:
+                shutil.rmtree(RUNS_DIR / run_id, ignore_errors=True)
+                removed_run = True
+            except Exception:
+                pass
+
+            # Cleanup manager state
+            MANAGER._api_keys.pop(run_id, None)
+            MANAGER._cancels.pop(run_id, None)
+            return _json_response(self, HTTPStatus.OK, {"ok": True, "removed_run": removed_run, "removed_repo": removed_repo, "skip_reason": skip_reason})
         except Exception as e:
             return _json_response(self, HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(e)})
 

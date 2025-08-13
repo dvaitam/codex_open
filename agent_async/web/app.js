@@ -347,7 +347,8 @@ function viewRun(runId) {
       el('div', { id: 'meta', class: 'badge' }, 'Loading...'),
       el('div', { id: 'status', class: 'badge' }, [el('span', { class: 'spinner' }), document.createTextNode(' Running')]),
       el('button', { class: 'btn secondary', id: 'open_pr_panel' }, 'Create PR'),
-      el('button', { class: 'btn danger', id: 'cancel_run' }, 'Cancel Run')
+      el('button', { class: 'btn danger', id: 'cancel_run' }, 'Cancel Run'),
+      el('button', { class: 'btn danger', id: 'delete_run' }, 'Delete Run')
     ]),
     el('div', { class: 'terminal', id: 'term' })
   ]);
@@ -466,6 +467,24 @@ function viewRun(runId) {
         appendLine('stderr', `[error] ${e.message || 'Cancel failed'}`);
       } finally {
         cancelBtn.textContent = 'Cancel Run';
+      }
+    });
+  }
+  const deleteBtn = $('#delete_run', container);
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', async () => {
+      if (!confirm('Delete this run and its cloned repo (if applicable)?')) return;
+      deleteBtn.disabled = true; deleteBtn.textContent = 'Deleting...';
+      try {
+        const res = await fetch(`/api/run/${encodeURIComponent(runId)}`, { method: 'DELETE' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.error) throw new Error(data.error || 'Delete failed');
+        appendLine('thought', '[info] Run deleted. Redirecting to runs list...');
+        setTimeout(() => { location.hash = '#runs'; }, 600);
+      } catch (e) {
+        appendLine('stderr', `[error] ${e.message || 'Delete failed'}`);
+      } finally {
+        deleteBtn.textContent = 'Delete Run';
       }
     });
   }
