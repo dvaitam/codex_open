@@ -458,7 +458,9 @@ class Handler(BaseHTTPRequestHandler):
                 evt = MANAGER._cancels[run_id]
             evt.set()
             run = MANAGER.registry.get(run_id)
-            EventBus(run.events_path).emit("agent.message", {"role": "info", "content": "Cancellation requested by user."})
+            eb = EventBus(run.events_path)
+            eb.emit("agent.message", {"role": "info", "content": "Cancellation requested by user."})
+            eb.emit("agent.done", {})
             return _json_response(self, HTTPStatus.OK, {"ok": True})
         except Exception as e:
             return _json_response(self, HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(e)})

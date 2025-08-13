@@ -24,6 +24,13 @@ class AgentRunner:
             {"role": "user", "content": f"Task: {task}"},
         ]
         transcript: List[Message] = list(original_transcript)
+        # Bootstrap: nudge model to propose a first 'run' action to inspect the repo
+        transcript.append({
+            "role": "user",
+            "content": (
+                "Propose a 'run' action now to inspect the repo, e.g., git status -sb && ls -la."
+            ),
+        })
 
         max_steps = 50
         invalid_count = 0

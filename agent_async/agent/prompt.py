@@ -30,5 +30,16 @@ Context:
 -  - Python: `python -m pytest`, `python <script.py>`
 -  - Java: `mvn -q -e -DskipTests=false test`, `./gradlew test`, or `javac *.java && java Main`
 -  - C/C++: `make test`, `cmake --build . --target test`, or `gcc/g++ ... && ./a.out`
+
+First Steps (be proactive):
+- Do not wait for user input. Start by inspecting the repo and locating tests/data:
+- 1) Run a safe reconnaissance command such as: `git status -sb && ls -la`.
+- 2) Discover tests or entry points. Examples:
+-    - If `pytest.ini`/`pyproject.toml`/`requirements.txt` present: `python -m pytest -q`.
+-    - If `Cargo.toml`: `cargo test -q`.
+-    - If `go.mod`: `go test ./...`.
+-    - If Java build files (`pom.xml`/`build.gradle`): run the project tests.
+-    - Otherwise, search: `grep -R -n test .` or list key dirs `ls -la src tests`.
+- Use `ls`, `grep -R -n`, and `cat` to read files and error logs as needed.
 """
 ).strip()
