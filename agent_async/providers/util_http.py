@@ -115,8 +115,14 @@ def _do_http_post(url: str, body: dict, headers: Optional[Dict[str, str]] = None
             raw = resp.read()
             text = raw.decode("utf-8", errors="replace")
             if debug_flag:
+                max_len = 2000
+                try:
+                    if os.environ.get("AGENT_ASYNC_DEBUG_HTTP_BODY") in ("1", "true", "yes"):
+                        max_len = len(text)
+                except Exception:
+                    pass
                 print(
-                    f"HTTP POST {_redact_url(url)} -> {status}\nHeaders: {_redact_headers(resp_headers)}\nBody: {text[:2000]}",
+                    f"HTTP POST {_redact_url(url)} -> {status}\nHeaders: {_redact_headers(resp_headers)}\nBody: {text[:max_len]}",
                     file=sys.stderr,
                 )
             return json.loads(text)
@@ -126,8 +132,16 @@ def _do_http_post(url: str, body: dict, headers: Optional[Dict[str, str]] = None
             raw = e.read() if hasattr(e, "read") else b""
             text = raw.decode("utf-8", errors="replace")
             if debug_flag:
+                max_len = 2000
+                payload_len = 1000
+                try:
+                    if os.environ.get("AGENT_ASYNC_DEBUG_HTTP_BODY") in ("1", "true", "yes"):
+                        max_len = len(text)
+                        payload_len = len(json.dumps(body))
+                except Exception:
+                    pass
                 print(
-                    f"HTTP POST {_redact_url(url)} HTTPError {e.code}: {text[:2000]}\nPayload: {json.dumps(body)[:1000]}",
+                    f"HTTP POST {_redact_url(url)} HTTPError {e.code}: {text[:max_len]}\nPayload: {json.dumps(body)[:payload_len]}",
                     file=sys.stderr,
                 )
             return json.loads(text)
@@ -140,8 +154,14 @@ def _do_http_post(url: str, body: dict, headers: Optional[Dict[str, str]] = None
             raise
     except Exception as e:
         if debug_flag:
+            payload_len = 1000
+            try:
+                if os.environ.get("AGENT_ASYNC_DEBUG_HTTP_BODY") in ("1", "true", "yes"):
+                    payload_len = len(json.dumps(body))
+            except Exception:
+                pass
             print(
-                f"HTTP POST {_redact_url(url)} failed: {e}\nPayload: {json.dumps(body)[:1000]}",
+                f"HTTP POST {_redact_url(url)} failed: {e}\nPayload: {json.dumps(body)[:payload_len]}",
                 file=sys.stderr,
             )
         raise
