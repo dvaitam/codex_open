@@ -62,6 +62,13 @@ class AgentRunner:
                         self.bus.emit("agent.message", {"role": "info", "content": "Cancelled while waiting for provider."})
                         self.bus.emit("agent.done", {})
                         return
+                    # Enforce an absolute think timeout
+                    if think_timeout and (time.time() - started) >= think_timeout:
+                        try:
+                            task.cancel()
+                        except Exception:
+                            pass
+                        raise asyncio.TimeoutError(f"provider think timeout after {think_timeout}s")
                     try:
                         reply = await asyncio.wait_for(task, timeout=0.5)
                         break
