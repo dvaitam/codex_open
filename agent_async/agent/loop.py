@@ -70,7 +70,8 @@ class AgentRunner:
                             pass
                         raise asyncio.TimeoutError(f"provider think timeout after {think_timeout}s")
                     try:
-                        reply = await asyncio.wait_for(task, timeout=0.5)
+                        # Shield the task so wait_for timeouts do not cancel it
+                        reply = await asyncio.wait_for(asyncio.shield(task), timeout=0.5)
                         break
                     except asyncio.TimeoutError:
                         # keep polling
