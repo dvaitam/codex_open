@@ -38,7 +38,7 @@ class AgentRunner:
         invalid_action_count = 0
         consecutive_message_only = 0
         no_text_resets = 0
-        think_timeout = int(os.environ.get("AGENT_ASYNC_THINK_TIMEOUT", "120"))
+        think_timeout = int(os.environ.get("AGENT_ASYNC_THINK_TIMEOUT", "600"))
         for step in range(max_steps):
             # Check for cancellation
             if self.cancel_check and self.cancel_check():

@@ -52,4 +52,26 @@ class ConsolePrinter:
             print(f"\n[error] {d.get('error')}")
         elif t == "agent.done":
             print("\n[done] agent completed")
-
+        elif t == "provider.start":
+            prov = d.get("provider", "")
+            model = d.get("model", "")
+            msgs = d.get("messages")
+            extra = f" msgs={msgs}" if msgs is not None else ""
+            print(f"\n[provider.start] {prov} {model}{extra}")
+        elif t == "provider.end":
+            prov = d.get("provider", "")
+            model = d.get("model", "")
+            ok = d.get("ok")
+            dur = d.get("duration_ms")
+            err = d.get("error")
+            canceled = d.get("cancelled")
+            parts = [f"[provider.end] {prov} {model}"]
+            if ok is not None:
+                parts.append(f"ok={ok}")
+            if dur is not None:
+                parts.append(f"{dur}ms")
+            if canceled:
+                parts.append("cancelled")
+            if err:
+                parts.append(f"error={err}")
+            print("\n" + " ".join(parts))
