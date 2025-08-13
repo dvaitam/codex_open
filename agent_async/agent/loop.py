@@ -179,7 +179,7 @@ class AgentRunner:
                         "No human is available to answer. Do not ask questions. "
                         "Propose a 'run' action now to gather the needed information yourself. "
                         "For example: run tests (e.g., 'pytest -q' or project-specific test commands), "
-                        "search the repo ('grep -R -n "test" .'), or inspect files."
+                        "search the repo (e.g., grep -R -n test .), or inspect files."
                     )
                     self.bus.emit("agent.message", {"role": "info", "content": "Steering model to act without user input."})
                     transcript.append({"role": "user", "content": hint})
