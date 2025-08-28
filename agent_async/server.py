@@ -569,10 +569,43 @@ def _create_pr_worker(run_id: str, branch: str, title: str, pr_body: str) -> Non
         # Ensure git repo exists
         event_bus.emit("agent.message", {"role": "info", "content": f"Preparing PR on branch {br}"})
 
+        pr_url_found: list[str] = []  # capture first detected PR URL
+
+        def _maybe_emit_pr_url_from_text(text: str):
+            try:
+                import re  # local import to avoid top-level cost
+                # find first http(s) URL-like token
+                for m in re.findall(r"https?://[^\s'\"]+", text):
+                    # Prefer GitHub PR/compare URLs
+                    if any(k in m for k in ("github.com", "gitlab.com", "bitbucket.org")):
+                        if "/pull/" in m or "/merge_requests/" in m or "/pull-requests/" in m or "/compare" in m:
+                            if not pr_url_found:
+                                pr_url_found.append(m)
+                                event_bus.emit("pr.url", {"url": m})
+                            return
+                # Fallback: emit the first generic URL if it looks repository-related
+                for m in re.findall(r"https?://[^\s'\"]+", text):
+                    if not pr_url_found:
+                        pr_url_found.append(m)
+                        event_bus.emit("pr.url", {"url": m})
+                        return
+            except Exception:
+                pass
+
         async def run_cmd(cmd: str):
             event_bus.emit("agent.command", {"cmd": cmd})
             async for stream, text in ex.run(cmd):
                 event_bus.emit("proc.stdout" if stream == "stdout" else "proc.stderr", {"text": text})
+                if stream == "stdout":
+                    _maybe_emit_pr_url_from_text(text)
+
+        async def run_capture(cmd: str) -> tuple[str, str]:
+            out, err = [], []
+            event_bus.emit("agent.command", {"cmd": cmd})
+            async for stream, text in ex.run(cmd):
+                event_bus.emit("proc.stdout" if stream == "stdout" else "proc.stderr", {"text": text})
+                (out if stream == "stdout" else err).append(text)
+            return "".join(out), "".join(err)
 
         # Detect default branch
         # If SSH key exists, prefix git commands to use it
@@ -607,6 +640,22 @@ def _create_pr_worker(run_id: str, branch: str, title: str, pr_body: str) -> Non
             + "else echo 'gh not installed; open your repository and create a PR from branch "
             + br + "'; fi"
         )
+        # If no URL was detected in gh output, synthesize a compare URL from origin
+        if not pr_url_found:
+            try:
+                out, _ = await run_capture("git remote get-url origin || true")
+                raw = (out or "").strip().splitlines()[0] if out else ""
+                web = raw
+                if raw.startswith("git@") and ":" in raw:
+                    host_path = raw.split(":", 1)[1]
+                    host = raw.split("@", 1)[1].split(":", 1)[0]
+                    web = f"https://{host}/" + host_path
+                web = web.replace(".git", "")
+                if web.startswith("http"):
+                    url = f"{web}/compare/{br}?expand=1"
+                    event_bus.emit("pr.url", {"url": url})
+            except Exception:
+                pass
         event_bus.emit("agent.message", {"role": "info", "content": "PR step finished (check output for URL or errors)."})
 
     try:

@@ -346,6 +346,7 @@ function viewRun(runId) {
       el('div', { class: 'badge mono' }, `Run ${runId}`),
       el('div', { id: 'meta', class: 'badge' }, 'Loading...'),
       el('div', { id: 'status', class: 'badge' }, [el('span', { class: 'spinner' }), document.createTextNode(' Running')]),
+      el('a', { class: 'btn', id: 'view_pr', href: '#', target: '_blank', style: 'display:none' }, 'View PR'),
       el('button', { class: 'btn secondary', id: 'open_pr_panel' }, 'Create PR'),
       el('button', { class: 'btn danger', id: 'cancel_run' }, 'Cancel Run'),
       el('button', { class: 'btn danger', id: 'delete_run' }, 'Delete Run')
@@ -386,9 +387,20 @@ function viewRun(runId) {
           if (t === 'agent.command') appendLine('cmd', `$ ${d.cmd}`);
           else if (t === 'proc.stdout') appendLine('stdout', d.text || '');
           else if (t === 'proc.stderr') appendLine('stderr', d.text || '');
+          else if (t === 'pr.url') {
+            const link = $('#view_pr', container);
+            if (link) { link.href = d.url; link.style.display = ''; }
+            appendLine('thought', `[info] PR: ${d.url}`);
+          }
           else if (t === 'agent.message') appendLine('thought', `[${d.role}] ${d.content}`);
           else if (t === 'agent.error') { appendLine('stderr', `[error] ${d.error}`); enablePrButton(); }
-          else if (t === 'agent.done') { appendLine('done', '[done] agent completed'); $('#status', container).textContent = 'Done'; alive = false; enablePrButton(); showPrPanel(); }
+          else if (t === 'agent.done') {
+            appendLine('done', '[done] agent completed');
+            $('#status', container).textContent = 'Done';
+            const cancel = $('#cancel_run', container);
+            if (cancel) { cancel.disabled = true; cancel.textContent = 'Finished'; }
+            alive = false; enablePrButton(); showPrPanel();
+          }
         });
         if (pos === prev && (!events || events.length === 0)) {
           idleCount++;
