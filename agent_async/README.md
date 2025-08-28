@@ -86,6 +86,18 @@ Limitations
 - In this sandbox, network calls are disabled; providers are structured but not executed.
 - A SimpleProvider can be used for dry runs.
 
+Model file edits
+----------------
+
+The agent does not expose a special patch tool. The model modifies files by proposing shell commands that the executor runs. Common patterns:
+
+- Create/overwrite a file via here-doc:
+  - sh -lc 'cat > path/to/file << "EOF"\n...content...\nEOF'
+- In-place multi-line edits via Python:
+  - sh -lc 'python3 - <<"PY"\nfrom pathlib import Path\np=Path("path/to/file"); s=p.read_text(); s=s.replace("OLD","NEW"); p.write_text(s)\nPY'
+
+Avoid relying on non-existent helpers like `apply_patch` unless you add such a script to your PATH.
+
 Tuning
 ------
 - Reduce log noise from event polling by default; set `AGENT_ASYNC_QUIET_EVENTS=0` to log every request.
