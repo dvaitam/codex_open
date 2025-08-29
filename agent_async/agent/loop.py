@@ -38,6 +38,9 @@ class AgentRunner:
         invalid_action_count = 0
         consecutive_message_only = 0
         no_text_resets = 0
+        # Tunables to avoid giving up too early on format issues
+        invalid_limit = int(os.environ.get("AGENT_ASYNC_INVALID_JSON_RETRIES", "5"))
+        no_text_limit = int(os.environ.get("AGENT_ASYNC_NO_TEXT_RESETS", "3"))
         think_timeout = int(os.environ.get("AGENT_ASYNC_THINK_TIMEOUT", "600"))
         for step in range(max_steps):
             # Check for cancellation
@@ -150,11 +153,11 @@ class AgentRunner:
                     })
                     continue
                 if "no text in response" in emsg or "empty response" in emsg:
-                    if no_text_resets < 2:
+                    if no_text_resets < no_text_limit:
                         no_text_resets += 1
                         self.bus.emit(
                             "agent.message",
-                            {"role": "info", "content": "Provider returned no text; resending initial prompt and task."},
+                            {"role": "info", "content": "Provider returned no text; requesting strict JSON-only reply with one single-line cmd."},
                         )
                         # Reset conversation to initial prompt and add strict JSON reminder
                         transcript = list(original_transcript)
@@ -162,7 +165,8 @@ class AgentRunner:
                             "role": "user",
                             "content": (
                                 "Respond again with exactly one JSON object only (no extra text, no code fences). "
-                                "Use the schema {\"type\":\"run|message|done\",\"cmd?\":string,\"message?\":string,\"thought\":string}."
+                                "Use the schema {\"type\":\"run|message|done\",\"cmd?\":string,\"message?\":string,\"thought\":string}. "
+                                "The 'cmd' must be a single-line shell command. Escape newlines as \\n and quotes as needed."
                             ),
                         })
                         continue
@@ -222,15 +226,18 @@ class AgentRunner:
                 except Exception:
                     invalid_count += 1
                     self.bus.emit("agent.error", {"error": f"Invalid provider reply (not JSON): {reply[:200]}"})
-                    if invalid_count >= 3:
+                    # Provide explicit guidance to help the model correct formatting
+                    hint = (
+                        "Your previous reply was not valid JSON. Reply with exactly one JSON object only (no backticks, no prose). "
+                        "Schema: {\"type\":\"run|message|done\",\"cmd?\":string,\"message?\":string,\"thought\":string}. "
+                        "The 'cmd' must be a single-line shell command. Do not include raw newlines; use \\n escapes inside the JSON string. "
+                        "If you need to write multi-line files, use a single-line printf with \\n (e.g., sh -lc 'printf %s \"line1\\nline2\" > file')."
+                    )
+                    self.bus.emit("agent.message", {"role": "info", "content": "Requesting JSON-only corrected reply (single-line cmd)."})
+                    if invalid_count >= invalid_limit:
                         break
                     # Ask the model to reformat strictly as JSON
-                    correction = (
-                        "Your previous reply was not valid JSON. Respond with exactly one JSON object "
-                        "matching the required schema with properly escaped quotes and backslashes. "
-                        "Do not include any extra text or code fences."
-                    )
-                    transcript.append({"role": "user", "content": correction})
+                    transcript.append({"role": "user", "content": hint})
                     continue
             else:
                 # Use the first object as the action; merge 'thought' from the next if present
@@ -247,7 +254,8 @@ class AgentRunner:
                 self.bus.emit("agent.message", {"role": "info", "content": "Model returned extra text; requesting JSON-only format."})
                 correction = (
                     "Reply again with exactly one JSON object only (no extra text, no code fences). "
-                    "Use the schema {\"type\":\"run|message|done\",\"cmd?\":string,\"message?\":string,\"thought\":string}."
+                    "Use the schema {\"type\":\"run|message|done\",\"cmd?\":string,\"message?\":string,\"thought\":string}. "
+                    "The 'cmd' must be a single-line shell command; escape newlines as \\n if needed."
                 )
                 transcript.append({"role": "user", "content": correction})
                 continue
@@ -294,6 +302,17 @@ class AgentRunner:
                 if not cmd:
                     self.bus.emit("agent.error", {"error": "Missing cmd in run action"})
                     break
+                # Guard against multi-line commands; request a corrected resend
+                if isinstance(cmd, str) and ("\n" in cmd or "\r" in cmd):
+                    self.bus.emit("agent.message", {"role": "info", "content": "Run cmd contained raw newlines; requesting single-line cmd with \\n escapes."})
+                    transcript.append({
+                        "role": "user",
+                        "content": (
+                            "Resend as exactly one JSON object. The 'cmd' must be a single-line shell command. "
+                            "Avoid here-docs; use printf with \\n escapes (e.g., sh -lc 'printf %s \"line1\\nline2\" > file')."
+                        ),
+                    })
+                    continue
                 consecutive_message_only = 0
                 self.bus.emit("agent.command", {"cmd": cmd})
                 # Execute and stream output
