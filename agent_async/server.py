@@ -407,6 +407,7 @@ class Handler(BaseHTTPRequestHandler):
             "gemini": ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-2.0-flash-exp"],
             "claude": ["claude-3-5-sonnet-latest", "claude-3-opus-latest", "claude-3-5-haiku-latest"],
             "xai": ["grok-2-latest", "grok-2-mini", "grok-beta"],
+            "deepseek": ["deepseek-chat", "deepseek-reasoner"],
             "simple": ["local-simulate", "local-analyze", "local-refactor"],
         }
         try:

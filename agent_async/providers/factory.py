@@ -7,6 +7,7 @@ from .openai import OpenAIProvider
 from .gemini import GeminiProvider
 from .xai import XAIProvider
 from .claude import ClaudeProvider
+from .deepseek import DeepseekProvider
 
 
 def provider_from_name(name: str, api_key: str | None = None) -> Provider:
@@ -21,4 +22,6 @@ def provider_from_name(name: str, api_key: str | None = None) -> Provider:
         return XAIProvider(api_key)
     if n == "claude":
         return ClaudeProvider(api_key)
+    if n == "deepseek":
+        return DeepseekProvider(api_key)
     raise ValueError(f"Unknown provider: {name}")

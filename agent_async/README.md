@@ -50,6 +50,12 @@ Models and API keys
 - Click "Fetch Models" to list available models from the provider's API.
 - You can still type a custom model name if needed.
 - API keys persist in your browser's localStorage by provider (never written to server disk). The last selected provider is also remembered and preselected on load.
+ - Supported providers and env vars:
+   - OpenAI: `OPENAI_API_KEY`
+   - Claude: `ANTHROPIC_API_KEY`
+   - Gemini: `GEMINI_API_KEY`
+   - xAI: `XAI_API_KEY`
+   - Deepseek: `DEEPSEEK_API_KEY`
 
 CLI (optional)
 --------------

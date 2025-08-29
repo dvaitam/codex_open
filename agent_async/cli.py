@@ -27,7 +27,7 @@ def make_parser() -> argparse.ArgumentParser:
 
     start = sub.add_parser("start", help="Start a task and stream output")
     start.add_argument("--repo", required=True, help="Path to local repo")
-    start.add_argument("--provider", default="simple", help="Provider: openai|claude|gemini|xai|simple")
+    start.add_argument("--provider", default="simple", help="Provider: openai|claude|gemini|xai|deepseek|simple")
     start.add_argument("--model", default=None, help="Model name, provider-specific")
     start.add_argument("--task", required=True, help="Programming task description")
     start.add_argument("--detached", action="store_true", help="Run in background and return run id")
@@ -146,4 +146,3 @@ def main(argv=None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

@@ -75,6 +75,7 @@ function viewNewTask() {
       { key: 'claude', label: 'Claude', dot: 'claude' },
       { key: 'gemini', label: 'Gemini', dot: 'gemini' },
       { key: 'xai', label: 'xAI', dot: 'xai' },
+      { key: 'deepseek', label: 'Deepseek', dot: 'deepseek' },
     ];
     const savedProvider = localStorage.getItem('agent_async/provider') || 'simple';
     providers.forEach((p) => wrap.appendChild(chip(p.key, p.label, p.dot, p.key === savedProvider)));
