@@ -387,6 +387,11 @@ function viewRun(runId) {
           if (t === 'agent.command') appendLine('cmd', `$ ${d.cmd}`);
           else if (t === 'proc.stdout') appendLine('stdout', d.text || '');
           else if (t === 'proc.stderr') appendLine('stderr', d.text || '');
+          else if (t === 'provider.reply') {
+            const info = d.file ? `${d.file} (${d.bytes||0} bytes)` : `${d.bytes||0} bytes`;
+            appendLine('thought', `[info] Saved provider reply: ${info}`);
+            if (d.excerpt) appendLine('stdout', d.excerpt);
+          }
           else if (t === 'pr.url') {
             const link = $('#view_pr', container);
             if (link) { link.href = d.url; link.style.display = ''; }

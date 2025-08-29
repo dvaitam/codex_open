@@ -121,6 +121,19 @@ class AgentRunner:
                         continue
                 dur = int((time.time() - started) * 1000)
                 self.bus.emit("provider.end", {"ok": True, "provider": prov_name, "model": model or "", "duration_ms": dur, "chars": len(reply or "")})
+                # Persist raw provider reply to a per-run file and emit a reference event
+                try:
+                    from pathlib import Path
+                    run_dir = Path(self.bus.path).parent
+                    out_dir = run_dir / "provider_replies"
+                    out_dir.mkdir(parents=True, exist_ok=True)
+                    fname = f"step_{step:03}.txt"
+                    fpath = out_dir / fname
+                    fpath.write_text(reply if isinstance(reply, str) else str(reply))
+                    excerpt = (reply or "")[:400] if isinstance(reply, str) else str(reply)[:400]
+                    self.bus.emit("provider.reply", {"file": str(fpath.relative_to(run_dir)), "bytes": len((reply or "")), "excerpt": excerpt})
+                except Exception:
+                    pass
             except asyncio.CancelledError:
                 # Gracefully handle cancellation, don't crash the worker thread
                 try:

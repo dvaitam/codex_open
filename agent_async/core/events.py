@@ -52,6 +52,10 @@ class ConsolePrinter:
             print(f"\n[error] {d.get('error')}")
         elif t == "agent.done":
             print("\n[done] agent completed")
+        elif t == "provider.reply":
+            path = d.get("file", "")
+            b = d.get("bytes")
+            print(f"\n[provider.reply] {b} bytes saved to {path}")
         elif t == "provider.start":
             prov = d.get("provider", "")
             model = d.get("model", "")
