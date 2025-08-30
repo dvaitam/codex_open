@@ -40,8 +40,8 @@ Start by running: git status --porcelain && ls -la""".strip()
         
         debug_flag = bool(os.environ.get("AGENT_ASYNC_DEBUG_HTTP"))
 
-        # Try different models if the primary one fails
-        models_to_try = [model, "grok-2-mini", "grok-beta"] if model != "grok-2-latest" else ["grok-2-latest", "grok-2-mini", "grok-beta"]
+        # Use only the specified model, no fallbacks
+        models_to_try = [model]
         
         last_error = None
         for attempt_model in models_to_try:
