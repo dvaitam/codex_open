@@ -313,13 +313,26 @@ class AgentRunner:
                     self.bus.emit("agent.error", {"error": "Missing cmd in run action"})
                     break
                 # Guard against multi-line commands by auto-correcting to a single line,
-                # but allow intentional multi-line scripts (e.g., heredoc, sh -c '...').
+                # but allow intentional multi-line scripts and JSON strings.
                 if isinstance(cmd, str) and ("\n" in cmd or "\r" in cmd):
-                    # Simple heuristic: if it looks like a script for an interpreter, don't join with &&.
-                    # This is not perfect but covers many common cases.
+                    # Enhanced heuristic: detect intentional multi-line commands
                     first_line = cmd.strip().splitlines()[0]
-                    is_script = first_line.startswith(("sh -c", "bash -c", "python -c", "python3 -c")) or "<<" in first_line
-                    if not is_script:
+                    
+                    # Check for various patterns that indicate intentional multi-line usage:
+                    # 1. Script interpreters (sh -c, python -c, etc.)
+                    # 2. Here-docs (<<)
+                    # 3. JSON strings (contains {...} with newlines)
+                    # 4. Python scripts (starts with python3 - << or contains \n within quotes)
+                    is_intentional_multiline = (
+                        first_line.startswith(("sh -c", "bash -c", "python -c", "python3 -c")) or
+                        "<<" in first_line or
+                        ("python3 -" in cmd and "<<" in cmd) or
+                        (cmd.strip().startswith('sh -lc \'') and '<<"' in cmd) or
+                        # Detect JSON-like structures with newlines
+                        (cmd.count('{') > 0 and cmd.count('}') > 0 and cmd.count('\n') <= 10)
+                    )
+                    
+                    if not is_intentional_multiline:
                         self.bus.emit("agent.message", {"role": "info", "content": "Run cmd contained raw newlines; auto-correcting to a single-line command."})
                         lines = [line.strip() for line in cmd.splitlines() if line.strip()]
                         cmd = " && ".join(lines)
