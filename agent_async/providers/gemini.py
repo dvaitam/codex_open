@@ -52,6 +52,7 @@ Provide concise progress updates for longer tasks, especially before doing time-
 Be concise and structured. Use short headers and bullets only when useful.
 
 # Tool Guidelines
+- To inspect files, use `head -n 50 <file>` or `grep <pattern> <file>` instead of `cat` to avoid large context.
 - Prefer fast search tools (rg) when available. Read files in reasonable chunks.
 - Modify files using portable shell commands (no special tools are available in this runtime):
   - Create/overwrite file via here-doc:
