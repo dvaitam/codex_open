@@ -38,8 +38,8 @@ class AgentRunner:
         consecutive_message_only = 0
         no_text_resets = 0
         # Tunables to avoid giving up too early on format issues
-        invalid_limit = int(os.environ.get("AGENT_ASYNC_INVALID_JSON_RETRIES", "5"))
-        no_text_limit = int(os.environ.get("AGENT_ASYNC_NO_TEXT_RESETS", "3"))
+        invalid_limit = int(os.environ.get("AGENT_ASYNC_INVALID_JSON_RETRIES", "3"))
+        no_text_limit = int(os.environ.get("AGENT_ASYNC_NO_TEXT_RESETS", "2"))
         think_timeout = int(os.environ.get("AGENT_ASYNC_THINK_TIMEOUT", "600"))
         for step in range(max_steps):
             # Check for cancellation

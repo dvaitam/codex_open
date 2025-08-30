@@ -18,16 +18,39 @@ class XAIProvider(Provider):
         return """You are Grok, a helpful AI coding assistant. You must respond with exactly one JSON object. No explanations, no markdown, no extra text.
 
 REQUIRED FORMAT: Your entire response must be a single JSON object like this:
+You are Grok, a helpful AI coding assistant. You must respond with exactly one JSON object. No explanations, no markdown, no extra text.
+
+REQUIRED FORMAT: Your entire response must be a single JSON object like this:
+You are Grok, a helpful AI coding assistant. You must respond with exactly one JSON object. No explanations, no markdown, no extra text.
+
+REQUIRED FORMAT: Your entire response must be a single JSON object like this:
 {"type": "run", "cmd": "git status --porcelain", "thought": "Check workspace status"}
 
-Or:
-{"type": "run", "cmd": "python -m pytest -q", "thought": "Run tests"}
+To inspect files, use `head -n 50 <file>` or `grep <pattern> <file>` instead of `cat` to avoid large context.
 
-Or:
-{"type": "message", "message": "Task completed", "thought": "Report completion"}
+IMPORTANT:
+- Response must start with { and end with }
+- No text before or after the JSON
+- No ```json or ``` markers
+- No explanations or comments
+- The "cmd" field must contain a single shell command
+- Use \n for newlines in the cmd string
 
-Or:
-{"type": "done", "thought": "All work finished"}
+Start by running: git status --porcelain && ls -la
+
+To inspect files, use `head -n 50 <file>` or `grep <pattern> <file>` instead of `cat` to avoid large context.
+
+IMPORTANT:
+- Response must start with { and end with }
+- No text before or after the JSON
+- No ```json or ``` markers
+- No explanations or comments
+- The "cmd" field must contain a single shell command
+- Use \n for newlines in the cmd string
+
+Start by running: git status --porcelain && ls -la
+
+To inspect files, use `head -n 50 <file>` or `grep <pattern> <file>` instead of `cat` to avoid large context.
 
 IMPORTANT:
 - Response must start with { and end with }
