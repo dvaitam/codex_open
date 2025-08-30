@@ -79,6 +79,7 @@ async def start_run(args: argparse.Namespace) -> int:
     event_bus.subscribe(printer.handle)
 
     provider = provider_from_name(args.provider, system_prompt=args.system_prompt)
+    event_bus.emit("agent.message", {"role": "info", "content": f"System prompt:\n---\n{provider.system_prompt}\n---"})
     executor = LocalExecutor(cwd=repo_path)
     runner = AgentRunner(event_bus=event_bus, provider=provider, executor=executor)
 
@@ -97,6 +98,7 @@ async def worker_mode(args: argparse.Namespace) -> int:
 
     event_bus = EventBus(run.events_path)
     provider = provider_from_name(run.provider, system_prompt=run.system_prompt)
+    event_bus.emit("agent.message", {"role": "info", "content": f"System prompt:\n---\n{provider.system_prompt}\n---"})
     executor = LocalExecutor(cwd=Path(run.repo_path))
     runner = AgentRunner(event_bus=event_bus, provider=provider, executor=executor)
     try:
