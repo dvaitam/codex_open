@@ -17,6 +17,7 @@ class AgentRunner:
         self.executor = executor
         self.truncate_limit = truncate_limit
         self.cancel_check = cancel_check
+        self.is_summarizing = False
 
     async def run(self, run_id: str, task: str, model: Optional[str]) -> None:
         original_transcript: List[Message] = [
@@ -48,16 +49,15 @@ class AgentRunner:
                 self.bus.emit("agent.done", {})
                 break
             try:
-                # Prepare a trimmed view of the transcript to avoid model context overflows
-                def estimate_len(msgs: List[Message]) -> int:
-                    total = 0
-                    for m in msgs:
-                        total += len(m.get("role", "")) + len(m.get("content", "")) + 8
-                    return total
-
+                # --- Context Management: Summarization and Truncation ---
                 ctx_max = int(os.environ.get("AGENT_ASYNC_CONTEXT_MAX_CHARS", "300000"))
                 per_msg_max = int(os.environ.get("AGENT_ASYNC_PER_MESSAGE_MAX_CHARS", "20000"))
 
+                # 1. Summarize if the transcript is too long
+                if self._estimate_len(transcript) > ctx_max:
+                    await self._summarize_transcript_inplace(transcript, model)
+
+                # 2. Prepare a trimmed view of the transcript for the provider
                 trimmed: List[Message] = []
                 # Always keep the first system message
                 if transcript and transcript[0].get("role") == "system":
@@ -79,15 +79,15 @@ class AgentRunner:
                 for m in reversed(normalized):
                     acc.append(m)
                     candidate = trimmed + list(reversed(acc))
-                    if estimate_len(candidate) > ctx_max:
+                    if self._estimate_len(candidate) > ctx_max:
                         acc.pop()  # remove last that overflowed
                         break
                 send_transcript: List[Message] = trimmed + list(reversed(acc))
 
-                if estimate_len(send_transcript) < estimate_len(transcript):
+                if self._estimate_len(send_transcript) < self._estimate_len(transcript):
                     self.bus.emit("agent.message", {"role": "info", "content": "Context trimmed to fit model limits."})
 
-                # Emit provider.start so users can correlate waiting periods
+                # --- Provider Interaction ---
                 prov_name = getattr(self.provider, "name", "")
                 self.bus.emit("provider.start", {"provider": prov_name, "model": model or "", "messages": len(send_transcript)})
                 # Emit a lightweight heartbeat so users see we're waiting on the model
@@ -312,11 +312,17 @@ class AgentRunner:
                 if not cmd:
                     self.bus.emit("agent.error", {"error": "Missing cmd in run action"})
                     break
-                # Guard against multi-line commands by auto-correcting to a single line.
+                # Guard against multi-line commands by auto-correcting to a single line,
+                # but allow intentional multi-line scripts (e.g., heredoc, sh -c '...').
                 if isinstance(cmd, str) and ("\n" in cmd or "\r" in cmd):
-                    self.bus.emit("agent.message", {"role": "info", "content": "Run cmd contained raw newlines; auto-correcting to a single-line command."})
-                    lines = [line.strip() for line in cmd.splitlines() if line.strip()]
-                    cmd = " && ".join(lines)
+                    # Simple heuristic: if it looks like a script for an interpreter, don't join with &&.
+                    # This is not perfect but covers many common cases.
+                    first_line = cmd.strip().splitlines()[0]
+                    is_script = first_line.startswith(("sh -c", "bash -c", "python -c", "python3 -c")) or "<<" in first_line
+                    if not is_script:
+                        self.bus.emit("agent.message", {"role": "info", "content": "Run cmd contained raw newlines; auto-correcting to a single-line command."})
+                        lines = [line.strip() for line in cmd.splitlines() if line.strip()]
+                        cmd = " && ".join(lines)
                 consecutive_message_only = 0
                 self.bus.emit("agent.command", {"cmd": cmd})
                 # Execute and stream output
@@ -383,3 +389,81 @@ class AgentRunner:
                 ),
             })
             continue
+
+    def _estimate_len(self, msgs: List[Message]) -> int:
+        total = 0
+        for m in msgs:
+            total += len(m.get("role", "")) + len(m.get("content", "")) + 8
+        return total
+
+    async def _summarize_transcript_inplace(self, transcript: List[Message], model: Optional[str]):
+        if self.is_summarizing:
+            return  # Avoid recursive summarization
+        self.is_summarizing = True
+        
+        try:
+            self.bus.emit("agent.message", {"role": "info", "content": "Context is full, attempting to summarize..."})
+
+            # 1. Identify what to summarize. Keep system prompt, initial task, and last N messages.
+            if len(transcript) < 10:  # Don't summarize if transcript is short
+                self.bus.emit("agent.message", {"role": "info", "content": "Transcript too short to summarize, will use truncation instead."})
+                return
+
+            # Find boundaries for summarization
+            # Keep system prompt + initial task
+            keep_at_start = 2
+            # Keep last 4 messages (2 pairs of user/assistant or user/tool_output)
+            keep_at_end = 4
+            
+            if len(transcript) <= keep_at_start + keep_at_end:
+                self.bus.emit("agent.message", {"role": "info", "content": "Not enough messages to summarize, will use truncation."})
+                return
+
+            start_messages = transcript[:keep_at_start]
+            end_messages = transcript[-keep_at_end:]
+            messages_to_summarize = transcript[keep_at_start:-keep_at_end]
+
+            if not messages_to_summarize:
+                return  # Nothing to summarize
+
+            # 2. Create summarization request
+            # Flatten the messages to summarize into a single string for the prompt
+            condensed_log = "\n".join([f"<{m['role']}>\n{m['content']}\n</{m['role']}>" for m in messages_to_summarize])
+
+            summary_request_transcript: List[Message] = [
+                {"role": "system", "content": (
+                    "You are an expert summarizer. Your task is to create a concise summary of an ongoing AI agent's work log. "
+                    "The summary should preserve key information: what has been tried, what were the outcomes (successes and failures), "
+                    "what files were changed, and what the agent was trying to do last. "
+                    "This summary will replace the original log to save space, so it must be accurate and informative for the agent to continue its task."
+                )},
+                {"role": "user", "content": f"Please summarize this conversation log:\n\n{condensed_log}"}
+            ]
+
+            # 3. Call provider to get summary
+            self.bus.emit("provider.start", {"provider": "summary", "model": model or ""})
+            summary_text = await self.provider.complete(model or "", summary_request_transcript)
+            self.bus.emit("provider.end", {"ok": True, "provider": "summary", "model": model or ""})
+
+            if not summary_text or not summary_text.strip():
+                self.bus.emit("agent.message", {"role": "info", "content": "Summarization failed: provider returned empty text."})
+                return
+
+            self.bus.emit("agent.message", {"role": "info", "content": f"Summary created:\n---\n{summary_text}\n---"})
+
+            # 4. Reconstruct the transcript
+            summary_message = {
+                "role": "user", 
+                "content": f"The following is a summary of the work done so far to catch you up:\n{summary_text}"
+            }
+            
+            new_transcript = start_messages + [summary_message] + end_messages
+            
+            # Replace original transcript
+            transcript.clear()
+            transcript.extend(new_transcript)
+
+        except Exception as e:
+            self.bus.emit("agent.error", {"error": f"Failed to summarize transcript: {e}"})
+        finally:
+            self.is_summarizing = False
