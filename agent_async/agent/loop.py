@@ -169,16 +169,14 @@ class AgentRunner:
                         no_text_resets += 1
                         self.bus.emit(
                             "agent.message",
-                            {"role": "info", "content": "Provider returned no text; requesting strict JSON-only reply with one single-line cmd."},
+                            {"role": "info", "content": f"Provider returned no text (attempt {no_text_resets}/{no_text_limit}); nudging model to respond with a JSON 'run' action."},
                         )
-                        # Reset conversation to initial prompt and add strict JSON reminder
-                        transcript = list(original_transcript)
+                        # Nudge model to respond with a JSON 'run' action
                         transcript.append({
                             "role": "user",
                             "content": (
-                                "Respond again with exactly one JSON object only (no extra text, no code fences). "
-                                "Use the schema {\"type\":\"run|message|done\",\"cmd?\":string,\"message?\":string,\"thought\":string}. "
-                                "The 'cmd' must be a single-line shell command. Escape newlines as \\n and quotes as needed."
+                                "Your previous response was empty. Please respond with exactly one JSON object. "
+                                "For example: {\"type\": \"run\", \"cmd\": \"ls -la\", \"thought\": \"List files\"}"
                             ),
                         })
                         continue
