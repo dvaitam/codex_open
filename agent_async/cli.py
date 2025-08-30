@@ -32,6 +32,7 @@ def make_parser() -> argparse.ArgumentParser:
     start.add_argument("--task", required=True, help="Programming task description")
     start.add_argument("--detached", action="store_true", help="Run in background and return run id")
     start.add_argument("--system-prompt", default=None, help="Custom system prompt to use (optional)")
+    start.add_argument("--debug", action="store_true", help="Enable debug mode for HTTP requests")
 
     watch = sub.add_parser("watch", help="Watch an existing run's events")
     watch.add_argument("--run", required=True, help="Run id to watch")
