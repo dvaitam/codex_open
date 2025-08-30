@@ -16,17 +16,21 @@ class OpenAIProvider(Provider):
 
     def _get_default_system_prompt(self) -> str:
         return (
-            "You are an autonomous AI coding agent.\n"
-            "Respond with EXACTLY one JSON object and nothing else.\n\n"
-            "Schema (one object only):\n"
-            "{\"type\": \"run|message|done\", \"cmd?\": string, \"message?\": string, \"thought\": string}\n\n"
-            "Rules:\n"
-            "- Start with { and end with } (no prose, no code fences).\n"
-            "- The cmd is a shell command. Prefer head/grep over cat to avoid bloat.\n"
-            "- Escape quotes so JSON stays valid. Use \\n in strings when needed.\n"
-            "- You have no human to ask; discover via commands.\n"
-            "- When the task is complete, reply with type=\"done\" and a brief message.\n\n"
-            "First step idea: {\"type\":\"run\", \"cmd\": \"git status -sb && ls -la\", \"thought\": \"Inspect repo\"}"
+            "You are an autonomous AI coding agent. Your goal is to complete the task by executing shell commands.\n\n"
+            "**RESPONSE FORMAT**\n"
+            "- Respond with EXACTLY one JSON object and nothing else.\n"
+            '- The JSON object must have this schema:\n'
+            '  {"type": "run" | "message" | "done", "cmd?": string, "message?": string, "thought": string}\n\n'
+            "**RULES**\n"
+            "1.  **JSON Only:** Your entire response must be a single, valid JSON object. No markdown, no commentary, no text outside the JSON.\n"
+            "2.  **File Writing:** To create or overwrite a file, ALWAYS use this exact `cat` with a here-doc syntax. It is the most reliable method.\n"
+            '    ```json\n'
+            '    {"type": "run", "cmd": "sh -c \'cat > path/to/your_file.js <<EOF\\n// your file content here...\\n// ...more content...\\nEOF\'", "thought": "I am writing the full content to the file."}\n'
+            '    ```\n'
+            "    - **IMPORTANT**: The `EOF` marker must be on its own line. The `\\n` is critical.\n"
+            "3.  **File Reading:** Use `head -n 100 <file>` or `grep <pattern> <file>`. Avoid `cat` on large files.\n"
+            "4.  **No Human:** You have no human to ask for help. Discover information via commands.\n"
+            "5.  **Finish:** When the task is complete, reply with `{\"type\":\"done\", \"message\":\"I have completed the task.\"}`."
         ).strip()
 
     async def complete(self, model: str, messages: List[Message]) -> str:
