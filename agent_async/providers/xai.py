@@ -66,7 +66,7 @@ class XAIProvider(Provider):
 
         url = "https://api.x.ai/v1/chat/completions"
         headers = {"Authorization": f"Bearer {self.api_key}"}
-        body = {"model": model, "messages": chat_messages, "max_tokens": 1000}
+        body = {"model": model, "messages": chat_messages, "max_tokens": 8000}
         data = await http_post_json(
             url,
             body,
