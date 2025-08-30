@@ -112,7 +112,7 @@ Safety and cleanliness:
             cons = list(contents)
             if extra_user_note:
                 cons.append({"role": "user", "parts": [{"text": extra_user_note}]})
-            cfg = {"temperature": 0.1}
+            cfg = {"temperature": 0.1, "maxOutputTokens": 8000}
             if force_json:
                 cfg["responseMimeType"] = "application/json"
             b = {"contents": cons, "generationConfig": cfg}
