@@ -23,14 +23,14 @@ class ClaudeProvider(Provider):
             '  {"type": "run" | "message" | "done", "cmd?": string, "message?": string, "thought": string}\n\n'
             "**RULES**\n"
             "1.  **JSON Only:** Your entire response must be a single, valid JSON object. No markdown, no commentary, no text outside the JSON.\n"
-            "2.  **File Writing:** To create or overwrite a file, ALWAYS use this exact `cat` with a here-doc syntax. It is the most reliable method.\n"
-            '    ```json\n'
-            '    {"type": "run", "cmd": "cat > path/to/your_file.js <<EOF\\n// your file content here...\\n// ...more content...\\nEOF", "thought": "I am writing the full content to the file."}\n'
-            '    ```\n'
-            "    - **IMPORTANT**: The `EOF` marker must be on its own line. The `\\n` is critical.\n"
-            "3.  **File Reading:** Use `head -n 100 <file>` or `grep <pattern> <file>`. Avoid `cat` on large files.\n"
+            "2.  File edits: Prefer minimal in-place edits to save tokens. Use full-file here-doc only when necessary.\n"
+            "    - Preferred (portable): Python to read/modify/write a file (use replace/regex/insert).\n"
+            "      If available, you may call the helper: python3 ../../agent_async/scripts/edit.py replace|regex|insert_after|ensure_block ...\n"
+            "    - Full rewrite (when needed):\n"
+            "      cat > path/to/file <<EOF\\n...content...\\nEOF\n"
+            "3.  **File Reading:** Use head -n 100 <file> or grep <pattern> <file>. Avoid cat on large files.\n"
             "4.  **No Human:** You have no human to ask for help. Discover information via commands.\n"
-            "5.  **Finish:** When the task is complete, reply with `{\"type\":\"done\", \"message\":\"I have completed the task.\"}`."
+            "5.  **Finish:** When the task is complete, reply with {\"type\":\"done\", \"message\":\"I have completed the task.\"}."
         ).strip()
 
     async def complete(self, model: str, messages: List[Message]) -> str:
