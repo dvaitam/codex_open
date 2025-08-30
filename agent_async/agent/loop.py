@@ -251,6 +251,32 @@ class AgentRunner:
             objs = parse_objects(cleaned)
             normalized_applied = False
             if not objs:
+                # NEW: Attempt to repair broken quotes in 'cmd' field as a first-pass repair
+                try:
+                    cmd_start_str = '"cmd": "'
+                    cmd_start_idx = cleaned.find(cmd_start_str)
+                    thought_start_str = '", "thought": "'
+                    thought_start_idx = cleaned.rfind(thought_start_str)
+
+                    if cmd_start_idx != -1 and thought_start_idx != -1 and cmd_start_idx < thought_start_idx:
+                        prefix_end = cmd_start_idx + len(cmd_start_str)
+                        middle = cleaned[prefix_end:thought_start_idx]
+                        
+                        if '"' in middle: # Only repair if there are quotes to fix
+                            prefix = cleaned[:prefix_end]
+                            suffix = cleaned[thought_start_idx:]
+                            repaired_middle = middle.replace('"', '\\"')
+                            repaired_cleaned = prefix + repaired_middle + suffix
+                            
+                            temp_objs = parse_objects(repaired_cleaned)
+                            if temp_objs:
+                                self.bus.emit("agent.message", {"role": "info", "content": "Repaired unescaped quotes in 'cmd' field."})
+                                cleaned = repaired_cleaned
+                                objs = temp_objs
+                except Exception:
+                    pass # Ignore repair errors, fall through to next method
+
+            if not objs:
                 # Try a lenient normalization to convert raw newlines inside strings to \n
                 if os.environ.get("AGENT_ASYNC_DISABLE_JSON_LENIENCY") not in ("1", "true", "yes"): 
                     cleaned_norm = normalize_json_string_newlines(cleaned)
