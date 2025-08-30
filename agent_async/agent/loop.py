@@ -312,17 +312,11 @@ class AgentRunner:
                 if not cmd:
                     self.bus.emit("agent.error", {"error": "Missing cmd in run action"})
                     break
-                # Guard against multi-line commands; request a corrected resend
+                # Guard against multi-line commands by auto-correcting to a single line.
                 if isinstance(cmd, str) and ("\n" in cmd or "\r" in cmd):
-                    self.bus.emit("agent.message", {"role": "info", "content": "Run cmd contained raw newlines; requesting single-line cmd with \\n escapes."})
-                    transcript.append({
-                        "role": "user",
-                        "content": (
-                            "Resend as exactly one JSON object. The 'cmd' must be a single-line shell command. "
-                            "Avoid here-docs; use printf with \\n escapes (e.g., sh -lc 'printf %s \"line1\\nline2\" > file')."
-                        ),
-                    })
-                    continue
+                    self.bus.emit("agent.message", {"role": "info", "content": "Run cmd contained raw newlines; auto-correcting to a single-line command."})
+                    lines = [line.strip() for line in cmd.splitlines() if line.strip()]
+                    cmd = " && ".join(lines)
                 consecutive_message_only = 0
                 self.bus.emit("agent.command", {"cmd": cmd})
                 # Execute and stream output
