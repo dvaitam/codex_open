@@ -210,8 +210,54 @@ class AgentRunner:
                         i = j + 1
                 return objs
 
+            def normalize_json_string_newlines(s: str) -> str:
+                """Replace raw newlines within JSON string literals with \n to allow lenient parsing."""
+                in_string = False
+                escaped = False
+                quote = '"'
+                out = []
+                i = 0
+                n = len(s)
+                while i < n:
+                    ch = s[i]
+                    if in_string:
+                        if escaped:
+                            out.append(ch)
+                            escaped = False
+                        elif ch == '\\':
+                            out.append(ch)
+                            escaped = True
+                        elif ch == quote:
+                            in_string = False
+                            out.append(ch)
+                        elif ch == '\r':
+                            # normalize CRLF or CR to \n
+                            if i + 1 < n and s[i + 1] == '\n':
+                                i += 1
+                            out.append('\\n')
+                        elif ch == '\n':
+                            out.append('\\n')
+                        else:
+                            out.append(ch)
+                    else:
+                        out.append(ch)
+                        if ch == quote:
+                            in_string = True
+                            escaped = False
+                    i += 1
+                return ''.join(out)
+
             cleaned = strip_fences(reply)
             objs = parse_objects(cleaned)
+            normalized_applied = False
+            if not objs:
+                # Try a lenient normalization to convert raw newlines inside strings to \n
+                cleaned_norm = normalize_json_string_newlines(cleaned)
+                if cleaned_norm != cleaned:
+                    objs = parse_objects(cleaned_norm)
+                    if objs:
+                        normalized_applied = True
+                        cleaned = cleaned_norm
 
             # Detect non-compliant formatting: multiple objects or extra text around JSON
             non_compliant = False
@@ -226,30 +272,11 @@ class AgentRunner:
                 if len(objs) > 1:
                     non_compliant = True
             except Exception:
-                pass
-            if not objs:
-                # last resort: try to load substring between first { and last }
-                try:
-                    start = cleaned.index("{")
-                    end = cleaned.rindex("}") + 1
-                    action = json.loads(cleaned[start:end])
-                except Exception:
-                    invalid_count += 1
-                    self.bus.emit("agent.error", {"error": f"Invalid provider reply (not JSON): {reply[:200]}"})
-                    # Provide explicit guidance to help the model correct formatting
-                    hint = (
-                        "Your previous reply was not valid JSON. Reply with exactly one JSON object only (no backticks, no prose). "
-                        "Schema: {\"type\":\"run|message|done\",\"cmd?\":string,\"message?\":string,\"thought\":string}. "
-                        "The 'cmd' must be a single-line shell command. Do not include raw newlines; use \\n escapes inside the JSON string. "
-                        "If you need to write multi-line files, use a single-line printf with \\n (e.g., sh -lc 'printf %s \"line1\\nline2\" > file')."
-                    )
-                    self.bus.emit("agent.message", {"role": "info", "content": "Requesting JSON-only corrected reply (single-line cmd)."})
-                    if invalid_count >= invalid_limit:
-                        break
-                    # Ask the model to reformat strictly as JSON
-                    transcript.append({"role": "user", "content": hint})
-                    continue
-            else:
+                # If we still can't decode from the start, mark as non-compliant to nudge the model
+                non_compliant = True
+
+            action = None
+            if objs:
                 # Use the first object as the action; merge 'thought' from the next if present
                 action = objs[0]
                 if "thought" not in action:
@@ -257,6 +284,45 @@ class AgentRunner:
                         if isinstance(extra, dict) and extra.get("thought"):
                             action["thought"] = extra.get("thought")
                             break
+            else:
+                # last resort: try to load substring between first { and last }
+                try:
+                    start = cleaned.index("{")
+                    end = cleaned.rindex("}") + 1
+                    try:
+                        action = json.loads(cleaned[start:end])
+                    except Exception:
+                        # Try normalization on just the JSON slice
+                        inner = cleaned[start:end]
+                        inner_norm = normalize_json_string_newlines(inner)
+                        if inner_norm != inner:
+                            action = json.loads(inner_norm)
+                            normalized_applied = True
+                            # treat as non-compliant since we had to slice
+                            non_compliant = True
+                except Exception:
+                    pass
+
+            if normalized_applied:
+                self.bus.emit("agent.message", {"role": "info", "content": "Applied lenient JSON newline normalization (converted raw newlines in strings to \\n)."})
+
+            if action is None:
+                invalid_count += 1
+                self.bus.emit("agent.error", {"error": f"Invalid provider reply (not JSON): {reply[:200]}"})
+                # Provide explicit guidance to help the model correct formatting
+                hint = (
+                    "Your previous reply was not valid JSON. Reply with exactly one JSON object only (no backticks, no prose). "
+                    "Schema: {\"type\":\"run|message|done\",\"cmd?\":string,\"message?\":string,\"thought\":string}. "
+                    "The 'cmd' must be a single-line shell command. Do not include raw newlines; use \\n escapes inside the JSON string. "
+                    "If you need to write multi-line files, use a single-line printf with \\n (e.g., sh -lc 'printf %s \"line1\\nline2\" > file')."
+                )
+                self.bus.emit("agent.message", {"role": "info", "content": "Requesting JSON-only corrected reply (single-line cmd)."})
+                if invalid_count >= invalid_limit:
+                    break
+                # Ask the model to reformat strictly as JSON
+                transcript.append({"role": "user", "content": hint})
+                continue
+
             invalid_count = 0
 
             # If the reply contained extra text or multiple objects, request strict JSON-only in next turn
