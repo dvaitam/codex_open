@@ -25,7 +25,7 @@ class XAIProvider(Provider):
             "1.  **JSON Only:** Your entire response must be a single, valid JSON object. No markdown, no commentary, no text outside the JSON.\n"
             "2.  **File Writing:** To create or overwrite a file, ALWAYS use this exact `cat` with a here-doc syntax. It is the most reliable method.\n"
             '    ```json\n'
-            '    {"type": "run", "cmd": "sh -c \'cat > path/to/your_file.js <<EOF\\n// your file content here...\\n// ...more content...\\nEOF\'", "thought": "I am writing the full content to the file."}\n'
+            '    {"type": "run", "cmd": "cat > path/to/your_file.js <<EOF\\n// your file content here...\\n// ...more content...\\nEOF", "thought": "I am writing the full content to the file."}\n'
             '    ```\n'
             "    - **IMPORTANT**: The `EOF` marker must be on its own line. The `\\n` is critical.\n"
             "3.  **File Reading:** Use `head -n 100 <file>` or `grep <pattern> <file>`. Avoid `cat` on large files.\n"

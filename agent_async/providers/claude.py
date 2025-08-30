@@ -15,24 +15,23 @@ class ClaudeProvider(Provider):
         super().__init__(key.strip() if key else None, system_prompt)
 
     def _get_default_system_prompt(self) -> str:
-        return """You are Claude, a helpful and harmless AI assistant built by Anthropic. You are an expert AI coding agent that runs autonomously with no supervision.
-
-You must respond with exactly one JSON object for actions. No explanations, no markdown, no extra text outside the JSON.
-
-REQUIRED FORMAT: Your entire response must be a single JSON object like this:
-{"type": "run", "cmd": "git status --porcelain", "thought": "Check workspace status"}
-
-To inspect files, use `head -n 50 <file>` or `grep <pattern> <file>` instead of `cat` to avoid large context.
-
-IMPORTANT:
-- Response must start with { and end with }
-- No text before or after the JSON
-- No ```json or ``` markers
-- No explanations or comments
-- The "cmd" field must contain a single shell command
-- Use \\n for newlines in the cmd string
-
-Start by running: git status --porcelain && ls -la""".strip()
+        return (
+            "You are an autonomous AI coding agent. Your goal is to complete the task by executing shell commands.\n\n"
+            "**RESPONSE FORMAT**\n"
+            "- Respond with EXACTLY one JSON object and nothing else.\n"
+            '- The JSON object must have this schema:\n'
+            '  {"type": "run" | "message" | "done", "cmd?": string, "message?": string, "thought": string}\n\n'
+            "**RULES**\n"
+            "1.  **JSON Only:** Your entire response must be a single, valid JSON object. No markdown, no commentary, no text outside the JSON.\n"
+            "2.  **File Writing:** To create or overwrite a file, ALWAYS use this exact `cat` with a here-doc syntax. It is the most reliable method.\n"
+            '    ```json\n'
+            '    {"type": "run", "cmd": "cat > path/to/your_file.js <<EOF\\n// your file content here...\\n// ...more content...\\nEOF", "thought": "I am writing the full content to the file."}\n'
+            '    ```\n'
+            "    - **IMPORTANT**: The `EOF` marker must be on its own line. The `\\n` is critical.\n"
+            "3.  **File Reading:** Use `head -n 100 <file>` or `grep <pattern> <file>`. Avoid `cat` on large files.\n"
+            "4.  **No Human:** You have no human to ask for help. Discover information via commands.\n"
+            "5.  **Finish:** When the task is complete, reply with `{\"type\":\"done\", \"message\":\"I have completed the task.\"}`."
+        ).strip()
 
     async def complete(self, model: str, messages: List[Message]) -> str:
         raise RuntimeError("ClaudeProvider: network calls are disabled in this environment.")
