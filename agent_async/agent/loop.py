@@ -8,7 +8,6 @@ from typing import List, Optional, Callable, Dict, Any
 from agent_async.core.events import EventBus
 from agent_async.exec.local import LocalExecutor
 from agent_async.providers.base import Message, Provider
-from .prompt import SYSTEM_PROMPT
 
 
 class AgentRunner:
@@ -21,7 +20,7 @@ class AgentRunner:
 
     async def run(self, run_id: str, task: str, model: Optional[str]) -> None:
         original_transcript: List[Message] = [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": self.provider.system_prompt},
             {"role": "user", "content": f"Task: {task}"},
         ]
         transcript: List[Message] = list(original_transcript)

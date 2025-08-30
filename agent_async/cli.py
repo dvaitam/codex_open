@@ -31,6 +31,7 @@ def make_parser() -> argparse.ArgumentParser:
     start.add_argument("--model", default=None, help="Model name, provider-specific")
     start.add_argument("--task", required=True, help="Programming task description")
     start.add_argument("--detached", action="store_true", help="Run in background and return run id")
+    start.add_argument("--system-prompt", default=None, help="Custom system prompt to use (optional)")
 
     watch = sub.add_parser("watch", help="Watch an existing run's events")
     watch.add_argument("--run", required=True, help="Run id to watch")
@@ -45,7 +46,7 @@ async def start_run(args: argparse.Namespace) -> int:
     repo_path = _ensure_repo(args.repo)
 
     registry = RunRegistry(base_dir=Path.cwd() / "runs")
-    run = registry.create_run(repo_path=repo_path, provider=args.provider, model=args.model, task=args.task)
+    run = registry.create_run(repo_path=repo_path, provider=args.provider, model=args.model, task=args.task, system_prompt=args.system_prompt)
 
     if args.detached:
         # Spawn a background worker process to execute this run
@@ -76,7 +77,7 @@ async def start_run(args: argparse.Namespace) -> int:
     printer = ConsolePrinter()
     event_bus.subscribe(printer.handle)
 
-    provider = provider_from_name(args.provider)
+    provider = provider_from_name(args.provider, system_prompt=args.system_prompt)
     executor = LocalExecutor(cwd=repo_path)
     runner = AgentRunner(event_bus=event_bus, provider=provider, executor=executor)
 
@@ -94,7 +95,7 @@ async def worker_mode(args: argparse.Namespace) -> int:
     run = registry.open_run_dir(run_dir)
 
     event_bus = EventBus(run.events_path)
-    provider = provider_from_name(run.provider)
+    provider = provider_from_name(run.provider, system_prompt=run.system_prompt)
     executor = LocalExecutor(cwd=Path(run.repo_path))
     runner = AgentRunner(event_bus=event_bus, provider=provider, executor=executor)
     try:

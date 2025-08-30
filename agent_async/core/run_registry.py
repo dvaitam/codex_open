@@ -15,6 +15,7 @@ class Run:
     provider: str
     model: Optional[str]
     task: str
+    system_prompt: Optional[str] = None
     truncate_limit: Optional[int] = None
 
     @property
@@ -27,7 +28,7 @@ class RunRegistry:
         self.base_dir = base_dir
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
-    def create_run(self, repo_path: Path, provider: str, model: Optional[str], task: str, repo_url: Optional[str] = None, truncate_limit: Optional[int] = None) -> Run:
+    def create_run(self, repo_path: Path, provider: str, model: Optional[str], task: str, repo_url: Optional[str] = None, system_prompt: Optional[str] = None, truncate_limit: Optional[int] = None) -> Run:
         run_id = f"{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}"
         run_dir = self.base_dir / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
@@ -38,10 +39,11 @@ class RunRegistry:
             "provider": provider,
             "model": model,
             "task": task,
+            "system_prompt": system_prompt,
             "truncate_limit": truncate_limit,
         }
         (run_dir / "meta.json").write_text(json.dumps(meta, indent=2))
-        return Run(id=run_id, dir=run_dir, repo_path=str(repo_path), repo_url=repo_url, provider=provider, model=model, task=task, truncate_limit=truncate_limit)
+        return Run(id=run_id, dir=run_dir, repo_path=str(repo_path), repo_url=repo_url, provider=provider, model=model, task=task, system_prompt=system_prompt, truncate_limit=truncate_limit)
 
     def get(self, run_id: str) -> Run:
         run_dir = self.base_dir / run_id
@@ -57,5 +59,6 @@ class RunRegistry:
             provider=meta["provider"],
             model=meta.get("model"),
             task=meta["task"],
+            system_prompt=meta.get("system_prompt"),
             truncate_limit=meta.get("truncate_limit"),
         )
