@@ -252,12 +252,13 @@ class AgentRunner:
             normalized_applied = False
             if not objs:
                 # Try a lenient normalization to convert raw newlines inside strings to \n
-                cleaned_norm = normalize_json_string_newlines(cleaned)
-                if cleaned_norm != cleaned:
-                    objs = parse_objects(cleaned_norm)
-                    if objs:
-                        normalized_applied = True
-                        cleaned = cleaned_norm
+                if os.environ.get("AGENT_ASYNC_DISABLE_JSON_LENIENCY") not in ("1", "true", "yes"): 
+                    cleaned_norm = normalize_json_string_newlines(cleaned)
+                    if cleaned_norm != cleaned:
+                        objs = parse_objects(cleaned_norm)
+                        if objs:
+                            normalized_applied = True
+                            cleaned = cleaned_norm
 
             # Detect non-compliant formatting: multiple objects or extra text around JSON
             non_compliant = False
@@ -327,14 +328,16 @@ class AgentRunner:
 
             # If the reply contained extra text or multiple objects, request strict JSON-only in next turn
             if non_compliant:
-                self.bus.emit("agent.message", {"role": "info", "content": "Model returned extra text; requesting JSON-only format."})
+                # Proceed with the parsed action, but warn and nudge the model to be JSON-only next time
+                self.bus.emit("agent.message", {"role": "info", "content": "Model returned extra text; proceeding with parsed JSON and requesting JSON-only next time."})
                 correction = (
-                    "Reply again with exactly one JSON object only (no extra text, no code fences). "
+                    "Note: In future, reply with exactly one JSON object only (no extra text, no code fences). "
                     "Use the schema {\"type\":\"run|message|done\",\"cmd?\":string,\"message?\":string,\"thought\":string}. "
                     "The 'cmd' must be a single-line shell command; escape newlines as \\n if needed."
                 )
+                # Append hint for the next turn without blocking current action
                 transcript.append({"role": "user", "content": correction})
-                continue
+                # Do not continue; we will execute the parsed action below
 
             atype = action.get("type")
             if not isinstance(atype, str):
