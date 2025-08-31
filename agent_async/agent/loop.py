@@ -8,6 +8,7 @@ from typing import List, Optional, Callable, Dict, Any
 from agent_async.core.events import EventBus
 from agent_async.exec.local import LocalExecutor
 from agent_async.providers.base import Message, Provider
+from agent_async.agent.context_limits import get_context_limits
 
 
 class AgentRunner:
@@ -50,8 +51,7 @@ class AgentRunner:
                 break
             try:
                 # --- Context Management: Summarization and Truncation ---
-                ctx_max = int(os.environ.get("AGENT_ASYNC_CONTEXT_MAX_CHARS", "300000"))
-                per_msg_max = int(os.environ.get("AGENT_ASYNC_PER_MESSAGE_MAX_CHARS", "20000"))
+                ctx_max, per_msg_max = get_context_limits(model)
 
                 # 1. Summarize if the transcript is too long
                 if self._estimate_len(transcript) > ctx_max:
