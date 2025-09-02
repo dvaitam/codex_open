@@ -4,7 +4,7 @@ import os
 from typing import List
 
 from .base import Message, Provider
-from .util_http import http_get_json
+from .util_http import http_get_json, http_post_json
 
 
 class ClaudeProvider(Provider):
@@ -38,7 +38,68 @@ class ClaudeProvider(Provider):
         ).strip()
 
     async def complete(self, model: str, messages: List[Message]) -> str:
-        raise RuntimeError("ClaudeProvider: network calls are disabled in this environment.")
+        if not self.api_key:
+            raise RuntimeError("Anthropic API key required for completion")
+        if not model:
+            model = "claude-3-5-sonnet-latest"
+
+        # Separate system messages to pass as system instruction
+        sys_msgs = [m.get("content", "") for m in messages if m.get("role") == "system"]
+        system_instruction = "\n\n".join([s for s in sys_msgs if isinstance(s, str)]).strip() or None
+
+        # Map messages to Anthropic format (user/assistant roles only)
+        anthro_messages = []
+        for m in messages:
+            role = m.get("role")
+            if role == "system":
+                continue
+            if role not in ("user", "assistant"):
+                role = "user"
+            anthro_messages.append({"role": role, "content": m.get("content", "")})
+
+        url = "https://api.anthropic.com/v1/messages"
+        headers = {
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01",
+        }
+        body = {
+            "model": model,
+            "messages": anthro_messages,
+            "max_tokens": 8000,
+            # modest temperature for more deterministic tooling
+            "temperature": 0.1,
+        }
+        if system_instruction:
+            body["system"] = system_instruction
+
+        debug_flag = bool(os.environ.get("AGENT_ASYNC_DEBUG_HTTP"))
+        data = await http_post_json(
+            url,
+            body,
+            headers=headers,
+            timeout=90,
+            retries=2,
+            backoff=1.8,
+            debug=debug_flag,
+        )
+        if isinstance(data.get("error"), dict):
+            msg = data["error"].get("message") or str(data["error"])[:200]
+            raise RuntimeError(f"Anthropic API error: {msg}")
+
+        # Extract text from Anthropic message content
+        parts = data.get("content") or []
+        texts: list[str] = []
+        for p in parts:
+            if isinstance(p, dict) and p.get("type") == "text" and p.get("text"):
+                texts.append(str(p.get("text")))
+        if texts:
+            return "".join(texts)
+
+        # Fallbacks on some SDKs
+        if isinstance(data.get("output_text"), str):
+            return str(data["output_text"])
+
+        raise RuntimeError("Claude completion: no text in response")
 
     async def list_models(self) -> list[str]:
         if not self.api_key:
