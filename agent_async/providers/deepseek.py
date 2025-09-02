@@ -81,7 +81,8 @@ Compilers/interpreters you may use:
 - C/C++: `make test`, `cmake --build . --target test`, or `gcc/g++ ... && ./a.out`
 
 Safety and cleanliness:
-- Before finishing, ensure no compiled binaries or build artifacts are left in the working tree or staged for commit. Remove typical artifacts (e.g., __pycache__/, *.pyc, dist/, build/, node_modules/, *.o, *.so, *.dll, *.exe, target/, *.class) or add appropriate .gitignore entries and run a safe cleanup (e.g., `git clean -fdX` after confirming ignores). Do not include built artifacts in any commits or PRs.""".strip()
+- Before finishing, ensure no compiled binaries or build artifacts are left in the working tree or staged for commit. Remove typical artifacts (e.g., __pycache__/, *.pyc, dist/, build/, node_modules/, *.o, *.so, *.dll, *.exe, target/, *.class) or add appropriate .gitignore entries and run a safe cleanup (e.g., `git clean -fdX` after confirming ignores). Do not include built artifacts in any commits or PRs.
+- Cleanup step: Always run a cleanup command before replying with type "done". Prefer `git clean -fdX` to remove ignored build outputs. If artifacts aren't ignored, explicitly delete common build directories/files (e.g., `rm -rf -- dist build target out .venv .tox .pytest_cache node_modules */bin */obj *.o *.so *.dll *.exe *.class __pycache__`).""".strip()
 
     async def complete(self, model: str, messages: List[Message]) -> str:
         if not self.api_key:

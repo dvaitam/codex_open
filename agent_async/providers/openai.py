@@ -31,7 +31,10 @@ class OpenAIProvider(Provider):
             "3.  **Output Truncation:** Only the last 200 lines of each command's combined stdout/stderr are provided back to you in the conversation context. Prefer commands that focus output (tail/grep/rg).\n"
             "4.  **File Reading:** Use head -n 100 <file> or grep <pattern> <file>. Avoid cat on large files.\n"
             "5.  **No Human:** You have no human to ask for help. Discover information via commands.\n"
-            "6.  **Finish:** When the task is complete, reply with {\"type\":\"done\", \"message\":\"I have completed the task.\"}."
+            "6.  **Finish:** When the task is complete, reply with {\"type\":\"done\", \"message\":\"I have completed the task.\"}.\n\n"
+            "**Safety and cleanliness**\n"
+            "- Before finishing, ensure no compiled binaries or build artifacts remain in the working tree or staged for commit. Remove typical artifacts (e.g., __pycache__/, *.pyc, dist/, build/, node_modules/, *.o, *.so, *.dll, *.exe, target/, *.class) or add appropriate .gitignore entries and run a safe cleanup (e.g., `git clean -fdX` after confirming ignores). Do not include built artifacts in any commits or PRs.\n"
+            "- Cleanup step: Always run a cleanup command before replying with type 'done'. Prefer `git clean -fdX` to remove ignored build outputs. If artifacts aren't ignored, explicitly delete common build directories/files (e.g., `rm -rf -- dist build target out .venv .tox .pytest_cache node_modules */bin */obj *.o *.so *.dll *.exe *.class __pycache__`)."
         ).strip()
 
     async def complete(self, model: str, messages: List[Message]) -> str:
