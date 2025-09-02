@@ -32,7 +32,7 @@ Recent repos
 
 Sending command outputs to the model
 -----------------------------------
-- By default, the agent now sends the full stdout/stderr of each command back to the model as context.
+- Context policy: for the last 10 commands, only the last 200 lines of each command's combined stdout/stderr are sent back to the model; for earlier commands, only the last 5 lines are retained.
 - You can enable truncation in the UI (New Task → Output to Model) and set a character limit (e.g., 4000).
 - The truncation setting is stored per-run and applied during that run only.
 

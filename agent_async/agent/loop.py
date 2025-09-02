@@ -443,12 +443,9 @@ class AgentRunner:
                     chunks.append(text)
 
                 full_output = "".join(chunks)
-                # Always feed back only the last N lines of output to the model
-                # Default to 200 lines as per product requirement
-                try:
-                    tail_lines = 200
-                except Exception:
-                    tail_lines = 200
+                # Feed back the last N lines of output to the model for the current command
+                # Policy: last 10 commands -> 200 lines, older commands -> 5 lines
+                tail_lines = 200
                 lines = full_output.splitlines()
                 excerpt_lines = lines[-tail_lines:] if tail_lines > 0 else []
                 excerpt_text = "\n".join(excerpt_lines)
@@ -456,6 +453,13 @@ class AgentRunner:
                     "role": "user",
                     "content": f"Command: {cmd}\nOutput (last {tail_lines} lines):\n{excerpt_text}",
                 })
+
+                # After appending current output, compress outputs of commands older than the last 10 to 5 lines
+                try:
+                    self._shrink_older_command_outputs_inplace(transcript, keep_recent=10, older_tail_lines=5)
+                except Exception:
+                    # Best effort; do not fail the run if shrinking encounters unexpected formats
+                    pass
                 continue
 
             if atype == "message":
@@ -511,6 +515,62 @@ class AgentRunner:
         for m in msgs:
             total += len(m.get("role", "")) + len(m.get("content", "")) + 8
         return total
+
+    def _shrink_older_command_outputs_inplace(self, transcript: List[Message], keep_recent: int = 10, older_tail_lines: int = 5) -> None:
+        """Shrink outputs of command messages older than the last `keep_recent`.
+
+        Looks for messages whose content starts with "Command:" and rewrites their
+        output block to only include the last `older_tail_lines` lines.
+        """
+        # Find indices of command messages
+        cmd_indices: List[int] = []
+        for i, m in enumerate(transcript):
+            c = m.get("content", "")
+            if isinstance(c, str) and c.startswith("Command: "):
+                cmd_indices.append(i)
+
+        if not cmd_indices:
+            return
+
+        # Determine which to shrink: all except the most recent `keep_recent`
+        to_keep = set(cmd_indices[-keep_recent:]) if keep_recent > 0 else set()
+        to_shrink = [i for i in cmd_indices if i not in to_keep]
+
+        for idx in to_shrink:
+            msg = transcript[idx]
+            content = msg.get("content", "")
+            if not isinstance(content, str):
+                continue
+
+            # Expect format:
+            # Command: <cmd>\n
+            # Output (last N lines):\n
+            # <output...>
+            try:
+                lines = content.splitlines()
+                if not lines or not lines[0].startswith("Command: "):
+                    continue
+                # Find the line that starts with Output (last
+                out_header_idx = None
+                for j in range(1, min(len(lines), 10)):
+                    if lines[j].startswith("Output (last "):
+                        out_header_idx = j
+                        break
+                if out_header_idx is None:
+                    continue
+                output_body = lines[out_header_idx + 1 :]
+                # Tail the body
+                new_body = output_body[-older_tail_lines:] if older_tail_lines > 0 else []
+                # Rebuild content with updated header
+                new_lines = []
+                new_lines.append(lines[0])
+                new_lines.append(f"Output (last {older_tail_lines} lines):")
+                new_lines.extend(new_body)
+                new_content = "\n".join(new_lines)
+                transcript[idx] = {"role": msg.get("role", "user"), "content": new_content}
+            except Exception:
+                # Best effort; skip malformed entries
+                continue
 
     async def _summarize_transcript_inplace(self, transcript: List[Message], model: Optional[str]):
         if self.is_summarizing:
