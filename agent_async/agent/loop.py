@@ -443,11 +443,19 @@ class AgentRunner:
                     chunks.append(text)
 
                 full_output = "".join(chunks)
-                if self.truncate_limit is not None and self.truncate_limit >= 0:
-                    excerpt_text = full_output[-self.truncate_limit:] if self.truncate_limit > 0 else ""
-                    transcript.append({"role": "user", "content": f"Command: {cmd}\nOutput (truncated to {self.truncate_limit} chars):\n{excerpt_text}"})
-                else:
-                    transcript.append({"role": "user", "content": f"Command: {cmd}\nOutput (full):\n{full_output}"})
+                # Always feed back only the last N lines of output to the model
+                # Default to 200 lines as per product requirement
+                try:
+                    tail_lines = 200
+                except Exception:
+                    tail_lines = 200
+                lines = full_output.splitlines()
+                excerpt_lines = lines[-tail_lines:] if tail_lines > 0 else []
+                excerpt_text = "\n".join(excerpt_lines)
+                transcript.append({
+                    "role": "user",
+                    "content": f"Command: {cmd}\nOutput (last {tail_lines} lines):\n{excerpt_text}",
+                })
                 continue
 
             if atype == "message":

@@ -36,6 +36,7 @@ Start by running: git status --porcelain && ls -la
 
 # Tool Guidelines
 - Prefer fast search tools (rg) when available. Read files in reasonable chunks.
+- Output truncation: only the last 200 lines of each command's combined stdout/stderr are added back into your context. Design commands to surface the most relevant lines (use tail/grep/rg or filters).
 - Modify files using portable shell commands (no special tools are available in this runtime):
   - Create/overwrite file via here-doc:
     - sh -lc 'cat > path/to/file << "EOF"\n...content...\nEOF'
@@ -139,4 +140,3 @@ Safety and cleanliness:
         except Exception:
             pass
         return ["deepseek-chat", "deepseek-reasoner"]
-

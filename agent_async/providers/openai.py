@@ -28,9 +28,10 @@ class OpenAIProvider(Provider):
             "      If available, you may call the helper: python3 ../../agent_async/scripts/edit.py replace|regex|insert_after|ensure_block ...\n"
             "    - Full rewrite (when needed):\n"
             "      cat > path/to/file <<EOF\\n...content...\\nEOF\n"
-            "3.  **File Reading:** Use head -n 100 <file> or grep <pattern> <file>. Avoid cat on large files.\n"
-            "4.  **No Human:** You have no human to ask for help. Discover information via commands.\n"
-            "5.  **Finish:** When the task is complete, reply with {\"type\":\"done\", \"message\":\"I have completed the task.\"}."
+            "3.  **Output Truncation:** Only the last 200 lines of each command's combined stdout/stderr are provided back to you in the conversation context. Prefer commands that focus output (tail/grep/rg).\n"
+            "4.  **File Reading:** Use head -n 100 <file> or grep <pattern> <file>. Avoid cat on large files.\n"
+            "5.  **No Human:** You have no human to ask for help. Discover information via commands.\n"
+            "6.  **Finish:** When the task is complete, reply with {\"type\":\"done\", \"message\":\"I have completed the task.\"}."
         ).strip()
 
     async def complete(self, model: str, messages: List[Message]) -> str:
