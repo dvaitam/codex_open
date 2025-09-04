@@ -160,7 +160,8 @@ class AgentRunner:
                         "role": "user",
                         "content": (
                             "Time is limited. Reply now with exactly one JSON object that proposes a 'run' action "
-                            "to gather information (e.g., run tests like 'pytest -q', list files, or grep for failing cases)."
+                            "to gather information (e.g., run tests like 'pytest -q' or project-specific test commands), "
+                            "list files, or grep for failing cases)."
                         ),
                     })
                     continue
@@ -422,7 +423,7 @@ class AgentRunner:
                         first_line.startswith(("sh -c", "bash -c", "python -c", "python3 -c")) or
                         "<<" in first_line or
                         ("python3 -" in cmd and "<<" in cmd) or
-                        (cmd.strip().startswith('sh -lc \'') and '<<"' in cmd) or
+                        (cmd.strip().startswith("sh -lc '") and '<<"' in cmd) or
                         # Detect JSON-like structures with newlines
                         (cmd.count('{') > 0 and cmd.count('}') > 0 and cmd.count('\n') <= 10)
                     )
@@ -444,7 +445,7 @@ class AgentRunner:
 
                 full_output = "".join(chunks)
                 # Feed back the last N lines of output to the model for the current command
-                # Policy: last 10 commands -> 200 lines, older commands -> 5 lines
+                # Policy: last 5 commands -> 200 lines, older commands -> 5 lines
                 tail_lines = 200
                 lines = full_output.splitlines()
                 excerpt_lines = lines[-tail_lines:] if tail_lines > 0 else []
@@ -454,9 +455,9 @@ class AgentRunner:
                     "content": f"Command: {cmd}\nOutput (last {tail_lines} lines):\n{excerpt_text}",
                 })
 
-                # After appending current output, compress outputs of commands older than the last 10 to 5 lines
+                # After appending current output, compress outputs of commands older than the last 5 to 5 lines
                 try:
-                    self._shrink_older_command_outputs_inplace(transcript, keep_recent=10, older_tail_lines=5)
+                    self._shrink_older_command_outputs_inplace(transcript, keep_recent=5, older_tail_lines=5)
                 except Exception:
                     # Best effort; do not fail the run if shrinking encounters unexpected formats
                     pass
